@@ -1,0 +1,582 @@
+---
+title: "DCTcomm"
+author: "MELISSA"
+date: "04/01/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Load packages
+library(BiocGenerics)
+library("org.Hs.eg.db")
+library("hgu133plus2.db")
+library("annotate")
+library(jetset)
+library(readxl)
+library(psych)
+library(GGally)
+library(gplots)
+library(ggplot2)
+library(RColorBrewer)
+library(data.table)
+library(grid)
+library(gridExtra)
+library(ggthemes)
+library(scales)
+library(rlist)
+library(icellnet)
+library(Seurat)
+
+
+gene.scaling2 = function(data = data, n = n, db = db) {
+  dim2 = dim(data)[2]
+  dim1 = dim(data)[1]
+  int = intersect(as.matrix(rownames(data)), as.matrix(db[, 1:5]))
+  data = data[which(rownames(data) %in% int), ]
+  for (i in 1:length(int)) {
+    progressBar(i, max = length(int))
+    sorted = sort(data[i, ], decreasing = TRUE)
+    max = sum(sorted[1, 1:n])/n
+    if (max > 0) {
+      data[i, ] = data[i, ] /max  * 10
+      data[i, which(data[i, ] > 10)] <- 10
+    }else (data [i, ] <- 0)
+    
+  }
+  data = (data[complete.cases(data), ])
+  return(data)
+}
+```
+
+```{r}
+## Data format for ICELLNET - on each 
+#======================================
+
+# Load data
+scData <- edta
+Idents(scData)= "celltype"
+scData<- RenameIdents(object = scData, `CD1c+ DC` = "CD1c_DC")
+scData<- RenameIdents(object = scData, `CLEC9a+ DC` = "CLEC9A_DC")
+scData<- RenameIdents(object = scData, `CD14+ Monocytes` = "CD14Mono")
+scData<- RenameIdents(object = scData, `CD16+ Monocytes` = "CD16Mono")
+table(Idents(scData))
+
+info.seurat=as.data.frame(table(Idents(scData), scData$orig.ident, scData$severity))
+info.seurat=dplyr::filter(info.seurat, info.seurat$Freq != 0)
+info.seurat$SampleID=paste0(info.seurat$Var1, "_", info.seurat$Var2)
+DefaultAssay(scData)
+
+# Merge clusters
+# DimPlot(scData, reduction = "umap", group.by = "orig.ident")
+# DimPlot(scData, reduction = "umap", group.by = 'ident')
+
+data <- as.data.frame(AverageExpression(scData,assays = "RNA", slot = "counts",add.ident ="orig.ident"))
+
+# data= as.data.frame(AverageExpression(scData, assays = "RNA", add.ident ="orig.ident", verbose = FALSE, ))  # previous method to compute average cluster
+colnames(data)=t(as.data.frame(substring(as.character(colnames(data)), 5))) #remove RNA.
+
+## Average manually -- > SAME AS : as.data.frame(AverageExpression(scData,assays = "RNA", slot = "counts",add.ident ="orig.ident"))
+# data.mat <- as.data.frame(GetAssayData(scData, slot = "counts"))
+# target <- scData@meta.data
+# target$Class=paste0(target$celltypes,"_", target$orig.ident) 
+# target$Cell=rownames(target)
+# head(target)
+# 
+# average.manual=matrix(ncol=length(unique(target$Class)), nrow=length(rownames(data.mat)))
+# colnames(average.manual)=unique(target$Class)
+# rownames(average.manual)=rownames(data.mat)
+# dim(average.manual)
+# for (cell in unique(target$Class)){
+#   cells.clust=target$Cell[which(target$Class==cell)]
+#   print(cell)
+#   if (length(cells.clust)>1){
+#     average.manual[,cell]=apply(data.mat[,which(colnames(data.mat)%in%cells.clust)], 1, mean)
+#   }else average.manual[,cell]=data.mat[,which(colnames(data.mat)%in%cells.clust)]
+#   
+# }
+
+#build target.file
+target=info.seurat
+rownames(target)=target$SampleID
+
+
+colnames(target)=c("Cell_type", "Patient", "Severity", "Nb_cell", "SampleID")
+#target$Time=c(rep("Control", 12), rep("J1", 12), rep("J4", 12), rep("J1", 11), rep("J1", 10), rep("J4", 12), rep("J1", 12), rep("J4", 12))
+#target$Patient=c(rep("Healthy_C", 12), rep("j0501", 12), rep("j0501", 12), rep("j0502", 11), rep("j0301", 10), rep("j0301", 12), rep("j037", 12), rep("j037", 12))
+
+target$ICELLNET_cell_OK=NA
+target$ICELLNET_cell_OK [which(target$Nb_cell >14)]= TRUE
+target$ICELLNET_cell_OK[is.na(target$ICELLNET_cell_OK)]=FALSE
+
+data=data[,rownames(target)] 
+rownames(target)==colnames(data)
+```
+
+
+
+
+# Apply ICELLNET
+#====================================
+
+```{r}
+#db <- readxl::read_xlsx("~/Desktop/Work Documents/ICELLNET/Databases/Lig-Rec DB  08.06.2020_ICELLNETV2_AddedColumn_DCT.xlsx", sheet=1)
+db <- readxl::read_xlsx("~/Documents/ICELLNET/Databases/Lig-Rec DB  08.06.2020_ICELLNETV2_AddedColumn_DCT.xlsx", sheet=1)
+#my.selection.LR=c("Cytokine", "Chemokine", "Checkpoint")
+#db2 <- db[grepl(paste(my.selection.LR, collapse="|"),db$Classifications),] 
+db=read_delim("C:/Users/MakotoTeam/Downloads/Lig-Rec DB  24.02.2020_ICELLNETV2_AddedColumn_DCT.csv",      ";", escape_double = FALSE, trim_ws = TRUE)
+db2=dplyr::filter(db, db$DC_T=="Yes")
+db.name.couple=name.lr.couple(db2, type="Family")
+head(db.name.couple)
+
+# CENTRAL CELLS = BioGPS
+table(PC.target.all$Cell_type)
+
+my.selection=c("CD4 T cell", "CD8 T cell", "B cell","DC1", "DC2")
+
+CC.target = PC.target.all[which(PC.target.all$Class%in%my.selection),c("ID","Class","Cell_type")]
+table(CC.target$Class)
+
+
+CC.data = PC.data.all[,CC.target$ID]
+
+#Convert the gene symbol to affy ID 
+CC.affy.probes = as.data.frame(CC.data[,c(1,2)])
+CC.affy.probes$ID = rownames(CC.affy.probes) # for format purpose
+transform = db.hgu133plus2(db2,CC.affy.probes) # creation of a new db2 database with AffyID instead of gene symbol
+#Gene scaling of the peripheral cell dataset
+CC.data=gene.scaling2(data = CC.data, n=round(0.01*dim(CC.data)[2]), db = transform) 
+
+#Select only T cell 
+CC.target = CC.target[which(CC.target$Cell_type=="T cell"),]
+CC.target$Class=CC.target$Cell_type
+##
+length(intersect(CC.target$ID, colnames(CC.data)))
+
+CC.data=CC.data[,CC.target$ID]
+
+# PERIPHERAL CELLS = Single cell 
+my.selection.pc=c("CD14Mono", "CD1c_DC" , "CD16Mono", "pDC", "asDC", "CLEC9A_DC" )
+
+PC.target.sc=target
+PC.target.sc$ID=PC.target.sc$SampleID
+PC.target.sc$Class=PC.target.sc$Cell_type
+
+PC.data.sc=as.data.frame(gene.scaling2(data, n = 1, db=db2))
+PC.data.sc$Symbol=rownames(PC.data.sc)
+
+# Direction of communication 
+direction="in"
+#time= "J1"
+saveRDS(PC.data,paste0(path, "PC.data_ICELLNET.Rds"))
+```
+
+
+
+# Select cells
+
+```{r}
+path= "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/COVID_EDTA_12122020/FIGURE_5/"
+
+
+PC.hthy=PC.target.sc[which(PC.target.sc$Severity == "Healthy" & PC.target.sc$ICELLNET_cell_OK==TRUE),]
+PC.hthy.data=as.data.frame(PC.data.sc[,which(colnames(PC.data.sc)%in%PC.hthy$SampleID )], row.names = rownames(PC.data.sc))
+
+PC.mod=PC.target.sc[which(PC.target.sc$Severity == "Moderate" & PC.target.sc$ICELLNET_cell_OK==TRUE ),]
+PC.mod.data=as.data.frame(PC.data.sc[,which(colnames(PC.data.sc)%in%PC.mod$SampleID)], row.names = rownames(PC.data.sc))
+
+PC.sev=PC.target.sc[which(PC.target.sc$Severity == "Severe" & PC.target.sc$ICELLNET_cell_OK==TRUE),]
+PC.sev.data=as.data.frame(PC.data.sc[,which(colnames(PC.data.sc)%in%PC.sev$SampleID)], row.names = rownames(PC.data.sc))
+
+
+# Compute score
+scores.1.compute=icellnet.score(direction=direction, CC.data=CC.data, PC.data=PC.hthy.data, PC.target = PC.hthy,
+                                CC.type="Microarray", PC.type = "RNAseq", db = db2, PC =my.selection.pc, family.type = "Family")
+
+scores.2.compute=icellnet.score(direction=direction, CC.data=CC.data, PC.data=PC.mod.data, PC.target = PC.mod,
+                                CC.type="Microarray", PC.type = "RNAseq", db = db2, PC =my.selection.pc, family.type = "Family")
+
+scores.3.compute=icellnet.score(direction=direction, CC.data=CC.data, PC.data=PC.sev.data, PC.target = PC.sev,
+                                CC.type="Microarray", PC.type = "RNAseq", db = db2, PC =my.selection.pc, family.type = "Family")
+
+scores1=as.data.frame(scores.1.compute[[1]])
+lr1=scores.1.compute[[2]]
+scores2=as.data.frame(scores.2.compute[[1]])
+lr2=scores.2.compute[[2]]
+scores3=as.data.frame(scores.3.compute[[1]])
+lr3=scores.3.compute[[2]]
+lr3[,1]=0
+
+#Look at difference betwwen medium condition (healthy patient)
+Scores=cbind(scores1,scores2, scores3)
+Scores2=Scores
+Scores2[,2]=Scores[,2]/Scores[,1]
+Scores2[,3]=Scores[,3]/Scores[,1]
+Scores2[,1]=Scores[,1]/Scores[,1]
+Scores2
+Scores=Scores2
+colnames(Scores)=c("T_hthy", "T_mod", "T_sev")
+if (length(which(Scores==0))>0){
+  Scores.norm=(Scores-min(Scores))/(max(Scores)-min(Scores))*10
+}else Scores.norm=(Scores-min(Scores))/(max(Scores)-min(Scores))*9+1
+
+saveRDS(Scores, paste0(path, "SCORES_ICELLNET.Rds"))
+#rownames(Scores.norm)[3] = "Class_Mono"
+#rownames(Scores.norm)[5] = "notClass_Mono"
+# Display intercellular communication networks
+unique(edta$celltype)
+cols= getPalette(length(unique(edta$celltype)))
+
+
+PC.col = c( "CLEC9A_DC"="#ff962c", "CD1c_DC"="#ff962c", "pDC"="#ff962c", "asDC"="#ff962c",
+            "CD14Monocytes"="#5EA9C3", "CD16Monocytes"= "#5EA9C3")
+##
+PC.col = c( "CLEC9A_DC"= "#FF7F00", "CD1c_DC"="#377EB8", "pDC"="#4DAF4A", "asDC"="#FFFF33",
+            "CD14Mono"="#E41A1C", "CD16Mono"= "#984EA3")
+
+##
+network.plot1 = network.create(icn.score = Scores.norm[1], scale = c(1,10), direction = direction, PC.col)
+network.plot2 = network.create(icn.score = Scores.norm[2], scale = c(1,10), direction = direction,PC.col)
+network.plot3 = network.create(icn.score = Scores.norm[3], scale = c(1,10), direction = direction,PC.col)
+
+ggsave(filename=paste0("HD_ICELLNET_NETWORK__",Sys.Date(),".png"), plot=network.plot1, device="png",
+       path= path, height=8, width=8, units="in", dpi=500)
+
+##
+ggsave(filename=paste0("MOD_ICELLNET_NETWORK_",Sys.Date(),".png"), plot=network.plot2, device="png",
+       path= path, height=8, width=8, units="in", dpi=500)
+##
+ggsave(filename=paste0("SEV_ICELLNET_NETWORK__",Sys.Date(),".png"), plot=network.plot3, device="png",
+       path= path, height=8, width=8, units="in", dpi=500)
+##
+p=grid.arrange(network.plot1, tableGrob(as.matrix(table(PC.hthy$Cell_type))),
+             network.plot2, tableGrob(as.matrix(table(PC.mod$Cell_type))),
+             network.plot3, tableGrob(as.matrix(table(PC.sev$Cell_type))),  ncol=2, nrow=3)
+
+
+
+#Compute the contribution of each family of molecules to the global communication scores
+## label and color label if you are working families of molecules already present in the database
+my.family=c("Growth factor","Chemokine","Checkpoint","Cytokine","Notch family","Antigen binding")
+family.col = c( "Growth factor"= "#AECBE3", "Chemokine"= "#66ABDF", "Checkpoint"= "#1D1D18"  ,
+                "Cytokine"="#156399", "Notch family" ="#676766", "Antigen binding" = "#12A039",  
+                "other" = "#908F90",  "NA"="#908F90")
+ymax=round(max(Scores))+1
+contrib.family.1= LR.family.score(lr=lr1, my.family=my.family, db.couple=db.name.couple) 
+contrib.family.2= LR.family.score(lr=lr2, my.family=my.family, db.couple=db.name.couple)
+contrib.family.3= LR.family.score(lr=lr3, my.family=my.family, db.couple=db.name.couple)
+
+
+#Display the contribution of each family of molecules in a barplot representation
+barplot1=LR.family.barplot(contrib.family.1, title=paste0("T_hthy -", direction), ymax =ymax)
+barplot2=LR.family.barplot(contrib.family.2, title=paste0("T_mod -", direction), ymax = ymax)
+barplot3=LR.family.barplot(contrib.family.3, title=paste0("T_sev -", direction), ymax = ymax)
+grid.arrange(network.plot1, barplot1, network.plot2, barplot2, network.plot3, barplot3, ncol=2, nrow=3)
+###
+ggsave(filename=paste0("HD_ICELLNET_barplot_",Sys.Date(),".png"), plot=barplot1, device="png",
+       path= path, height=5, width=8, units="in", dpi=500)
+
+##
+ggsave(filename=paste0("MOD_ICELLNET_barplot_",Sys.Date(),".png"), plot=barplot2, device="png",
+       path= path, height=5, width=8, units="in", dpi=500)
+##
+ggsave(filename=paste0("SEV_ICELLNET_barplot_",Sys.Date(),".png"), plot=barplot3, device="png",
+       path= path, height=5, width=8, units="in", dpi=500)
+
+
+#for (cell in colnames(lr1)){
+  cell="CD1c_DC"
+  lr_ind=cbind(lr1[,cell], lr2[,cell], lr3[,cell])
+  if (direction=="out"){colnames(lr_ind)=c(paste0("TO_",cell,"_hthy"),paste0("TO_",cell,"_mod"), paste0("TO_",cell,"_sev"))}
+  if (direction=="in"){colnames(lr_ind)=c(paste0("FROM_",cell,"_hthy"),paste0("FROM_",cell,"_mod"), paste0("FROM_",cell,"_sev"))}
+
+  lr_ind=lr_ind[,which(colSums(lr_ind, na.rm =T)>0.05)]
+  
+  delta.lr.couple=rownames(lr2[which((abs(lr2[,cell]-lr3[,cell])>5)==TRUE),])
+  delta.com=cbind(lr1[delta.lr.couple,cell], lr2[delta.lr.couple,cell],  lr3[delta.lr.couple,cell])
+  if (direction=="out"){colnames(delta.com)=c(paste0("TO_",cell,"_hthy"),paste0("TO_",cell,"_mod"), paste0("TO_",cell,"_sev"))}
+  if (direction=="in"){colnames(delta.com)=c(paste0("FROM_",cell,"_hthy"),paste0("FROM_",cell,"_mod"), paste0("FROM_",cell,"_sev"))}
+##test1:
+pairs=c("CD80 / CD28", "HLA-DPA1 / LAG3", "HLA-DPB1 / LAG3", "HLA-DQA1 / LAG3", "HLA-DQA2 / LAG3", "HLA-DQB1 / LAG3", "HLA-DQB2 / LAG3","HLA-DRB5 / LAG3", "TNFSF4 / TNFRSF4", "NECTIN2 / CD226", "NECTIN3 / TIGIT", "PVR / TIGIT","PVR / CD96","PVR / PVRIG","CCL16 / CCR1","CCL16 / CCR5","CCL5 / CCR5" ,"PF4V1 / CXCR3", "TGFB2 / TGFBR1 + TGFBR2","TGFB3 / TGFBR1 + TGFBR2", "IL10 / IL10RA + IL10RB", "DLL1 / NOTCH3", "LGALS1 / CD69")
+lr2= lr_ind[which(rownames(lr_ind) %in% pairs),]
+  
+  balloon=LR.balloon.plot2(lr = lr2, PC = colnames(lr_ind), thresh = 0 , type="raw", db.name.couple=db.name.couple, title="MOST DIFFERENT L/R Pairs ")
+  
+  balloon1=icellnet::LR.balloon.plot(lr = lr2, PC = colnames(lr_ind), thresh =2 , type="raw", db.name.couple = db.name.couple,
+                                     title=paste0("MOST CONTRIBUTING L/R Pairs to the score - cutoff ", round(0.02*max(Scores[cell,])))) 
+  ggsave(filename=paste0("BALOON_MOSTSIGNFICANT_TEST2_",Sys.Date(),".png"), plot=balloon1, device="png",
+       path= path, height=6, width=10, units="in", dpi=500)
+  
+  grid.arrange(balloon1, nrow=1, ncol=2)
+#}
+  
+  LR.balloon.plot2= function (lr = lr, PC = PC, thresh = thresh, type = c("raw", "percentage"), db.name.couple = db.name.couple, title = title) 
+    {
+      lr = lr[complete.cases(lr), ]
+      lr = lr[is.finite(log2(rowSums(lr))), ]
+      rank0 = as.data.table(x = character(0))
+      i = 2
+      if (length(PC) == 1) {
+        ranked.lr.cell = as.data.table(sort(lr[, cell], decreasing = TRUE), 
+                                       keep.rownames = TRUE)
+        if (type == "percentage") {
+          ranked.lr.cell$V2 = round(ranked.lr.cell$V2/sum(lr[, 
+                                                             cell]) * 100, 1)
+        }
+        if (is.null(which(as.numeric(sum(ranked.lr.cell$V2)) > 
+                          as.numeric(thresh)))) {
+          i = i + 1
+        }
+        else rank = as.data.table(ranked.lr.cell[which(as.numeric(sum(ranked.lr.cell$V2)) > 
+                                                         as.numeric(thresh))], keep.rownames = TRUE)
+        rank0 = rank
+      }
+      else for (cell in PC) {
+        ranked.lr.cell = as.data.table(sort(lr[, cell], decreasing = TRUE), 
+                                       keep.rownames = TRUE)
+        if (type == "percentage") {
+          ranked.lr.cell$V2 = round(ranked.lr.cell$V2/sum(lr[, 
+                                                             cell]) * 100, 1)
+        }
+        if (is.null(which(as.numeric(sum(ranked.lr.cell$V2)) > 
+                          as.numeric(thresh)))) {
+          i = i + 1
+        }
+        else rank = as.data.table(ranked.lr.cell[which(as.numeric(ranked.lr.cell$V2) > 
+                                                         as.numeric(thresh))], keep.rownames = TRUE)
+        rank0 <- merge(rank0, rank, by = "V1", all = TRUE)
+        colnames(rank0)[i] <- cell
+        i = i + 1
+      }
+      vars <- PC
+      rank0$family = rep(NA, length(rank0$V1))
+      for (i in 1:length(rank0$V1)) {
+        rank0$family[i] = as.character(db.name.couple[which(db.name.couple[, 
+                                                                           1] == rank0$V1[i]), 2])
+      }
+      melted <- melt(rank0, id.vars = c("V1", "family"))
+      melted$family[is.na(melted$family)] <- "NA"
+      melted = melted %>% arrange(family, variable)
+      melted <- melted %>% mutate(row = group_indices_(melted, 
+                                                       .dots = c("family", "V1")))
+      melted <- melted %>% mutate(col = group_indices_(melted, 
+                                                       .dots = c("variable")))
+      #melted=as.data.frame(melted)
+      vars_x_axis <- c(melted %>% arrange(col) %>% select(variable) %>% 
+                         distinct())$variable
+      names_y_axis <- c(melted %>% arrange(row) %>% group_by(V1) %>% 
+                          distinct(V1) %>% select(V1))$V1
+      plot <- ggplot(melted, aes(x = factor(col), y = factor(row), 
+                                 color = factor(family), size = value)) + geom_point() + 
+       scale_size_area(max_size = 8) + scale_x_discrete(breaks = 1:length(vars_x_axis), 
+                                                                               labels = vars_x_axis, position = "top") + scale_y_discrete(breaks = 1:length(names_y_axis), 
+                                                                                                                                          labels = names_y_axis) + scale_color_manual(values = family.col) + 
+        theme_classic() + labs(title = title) + theme(axis.line = element_blank(), 
+                                                      axis.title = element_blank(), panel.border = element_blank(), 
+                                                      panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank(), 
+                                                      axis.text.y = element_text(size = 13), axis.text.x = element_text(angle = 90), 
+                                                      axis.ticks.x = element_blank(), axis.ticks.y = element_blank())
+      return(plot)
+    }
+```
+
+test:
+```{r}
+lr_ind2=lr_ind
+lr_ind2= t(lr_ind2)
+#lr_ind2=lr_ind2[is.na(lr_ind2)]=0
+lr_ind2.res=as.data.frame(apply(lr_ind2, 2, var))
+colnames(lr_ind2.res)="variance_pairs"
+lr_ind2.res$pairs= rownames(lr_ind2.res)
+lr_ind2.res=lr_ind2.res[order(lr_ind2.res$variance_pairs, decreasing = T),]
+top_lr= lr_ind2.res$pairs[1:30]
+##
+lr2= lr_ind[which(rownames(lr_ind) %in% pairs),]
+
+lr3= lr_ind[which(rownames(lr_ind) %in% top_lr),]
+ balloon1=icellnet::LR.balloon.plot(lr = lr2, PC = colnames(lr2), thresh =0 , type="raw", db.name.couple = db.name.couple,
+                                     title=paste0("MOST CONTRIBUTING L/R Pairs to the score - cutoff ", round(0.02*max(Scores[cell,])))) + theme( elemet)
+ saveRDS(lr3, paste0(path, "LR_selected_Topvariable.Rds"))
+###
+  
+   plot <- ggplot(melted, aes(x = factor(col), y = factor(row), 
+        color = factor(family), size = value)) + geom_point() + 
+        geom_text(aes(label = round(value), x = col + 0.4), alpha = 1, 
+            size = 3) + scale_size_area(max_size = 8) + scale_x_discrete(breaks = 1:length(vars_x_axis), 
+        labels = vars_x_axis, position = "top") + scale_y_discrete(breaks = 1:length(names_y_axis), 
+        labels = names_y_axis) + scale_color_manual(values = family.col) + 
+        theme_classic() + labs(title = title) + theme(axis.line = element_blank(), 
+        axis.title = element_blank(), panel.border = element_blank(), 
+        panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank(), 
+        axis.text.y = element_text(size = 13), axis.text.x = element_text(angle = 90), 
+        axis.ticks.x = element_blank(), axis.ticks.y = element_blank())
+ 
+     
+```
+
+```{r}
+LR.family.barplot= function(data, title, ymax){
+ melted <- melt(data)
+    melted$Var1 = as.factor(melted$Var1)
+    
+    plot <- ggplot(data = melted, aes(x = Var2, y = value, fill = Var1)) + 
+        geom_bar(stat = "identity") + scale_fill_manual(values = family.col)+  theme_classic() + 
+        labs(x = NULL, y = "score", title = title)  + theme(axis.text.x = element_text(angle = 90, 
+        size = 14, color = "black", face="bold"), axis.text.y = element_text(size = 18, color="black",face="bold"), axis.title.y = element_text(size = 14, color = "black", face="bold"))}
+  
+```
+
+
+```{r}
+LR.balloon.plot=function (lr = lr, PC = PC, thresh = thresh, type = c("raw", 
+    "percentage"), db.name.couple = db.name.couple, title = title) 
+{
+    lr = lr[complete.cases(lr), ]
+    lr = lr[is.finite(log2(rowSums(lr))), ]
+    rank0 = as.data.table(x = character(0))
+    i = 2
+    if (length(PC) == 1) {
+        ranked.lr.cell = as.data.table(sort(lr[, cell], decreasing = TRUE), 
+            keep.rownames = TRUE)
+        if (type == "percentage") {
+            ranked.lr.cell$V2 = round(ranked.lr.cell$V2/sum(lr[, 
+                cell]) * 100, 1)
+        }
+        if (is.null(which(as.numeric(sum(ranked.lr.cell$V2)) > 
+            as.numeric(thresh)))) {
+            i = i + 1
+        }
+        else rank = as.data.table(ranked.lr.cell[which(as.numeric(sum(ranked.lr.cell$V2)) > 
+            as.numeric(thresh))], keep.rownames = TRUE)
+        rank0 = rank
+    }
+    else for (cell in PC) {
+        ranked.lr.cell = as.data.table(sort(lr[, cell], decreasing = TRUE), 
+            keep.rownames = TRUE)
+        if (type == "percentage") {
+            ranked.lr.cell$V2 = round(ranked.lr.cell$V2/sum(lr[, 
+                cell]) * 100, 1)
+        }
+        if (is.null(which(as.numeric(sum(ranked.lr.cell$V2)) > 
+            as.numeric(thresh)))) {
+            i = i + 1
+        }
+        else rank = as.data.table(ranked.lr.cell[which(as.numeric(ranked.lr.cell$V2) > 
+            as.numeric(thresh))], keep.rownames = TRUE)
+        rank0 <- merge(rank0, rank, by = "V1", all = TRUE)
+        colnames(rank0)[i] <- cell
+        i = i + 1
+    }
+    vars <- PC
+    rank0$family = rep(NA, length(rank0$V1))
+    for (i in 1:length(rank0$V1)) {
+        rank0$family[i] = as.character(db.name.couple[which(db.name.couple[, 
+            1] == rank0$V1[i]), 2])
+    }
+    melted <- melt(rank0, id.vars = c("V1", "family"))
+    melted$family[is.na(melted$family)] <- "NA"
+    melted = melted %>% arrange(family, variable)
+    melted <- melted %>% mutate(row = group_indices_(melted, 
+        .dots = c("family", "V1")))
+    melted <- melted %>% mutate(col = group_indices_(melted, 
+        .dots = c("variable")))
+    vars_x_axis <- c(melted %>% arrange(col) %>% select(variable) %>% 
+        distinct())$variable
+    names_y_axis <- c(melted %>% arrange(row) %>% group_by(V1) %>% 
+        distinct(V1) %>% select(V1))$V1
+    plot <- ggplot(melted, aes(x = factor(col), y = factor(row), 
+        color = factor(family), size = value)) + geom_point() + 
+       scale_size_area(max_size = 8) + scale_x_discrete(breaks = 1:length(vars_x_axis), 
+        labels = vars_x_axis, position = "top") + scale_y_discrete(breaks = 1:length(names_y_axis), 
+        labels = names_y_axis) + scale_color_manual(values = family.col) + 
+        theme_classic() + labs(title = title) + theme(axis.line = element_blank(), 
+        axis.title = element_blank(), panel.border = element_blank(), 
+        panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank(), 
+        axis.text.y = element_text(size = 13), axis.text.x = element_text(angle = 90), 
+        axis.ticks.x = element_blank(), axis.ticks.y = element_blank())
+    return(plot)
+}
+```
+
+```{r}
+LR.balloon.plot=function (lr = lr, PC = PC, thresh = thresh, type = c("raw", 
+    "percentage"), db.name.couple = db.name.couple, title = title) 
+{
+    lr = lr[complete.cases(lr), ]
+    lr = lr[is.finite(log2(rowSums(lr))), ]
+    rank0 = as.data.table(x = character(0))
+    i = 2
+    if (length(PC) == 1) {
+        ranked.lr.cell = as.data.table(sort(lr[, cell], decreasing = TRUE), 
+            keep.rownames = TRUE)
+        if (type == "percentage") {
+            ranked.lr.cell$V2 = round(ranked.lr.cell$V2/sum(lr[, 
+                cell]) * 100, 1)
+        }
+        if (is.null(which(as.numeric(sum(ranked.lr.cell$V2)) > 
+            as.numeric(thresh)))) {
+            i = i + 1
+        }
+        else rank = as.data.table(ranked.lr.cell[which(as.numeric(sum(ranked.lr.cell$V2)) > 
+            as.numeric(thresh))], keep.rownames = TRUE)
+        rank0 = rank
+    }
+    else for (cell in PC) {
+        ranked.lr.cell = as.data.table(sort(lr[, cell], decreasing = TRUE), 
+            keep.rownames = TRUE)
+        if (type == "percentage") {
+            ranked.lr.cell$V2 = round(ranked.lr.cell$V2/sum(lr[, 
+                cell]) * 100, 1)
+        }
+        if (is.null(which(as.numeric(sum(ranked.lr.cell$V2)) > 
+            as.numeric(thresh)))) {
+            i = i + 1
+        }
+        else rank = as.data.table(ranked.lr.cell[which(as.numeric(ranked.lr.cell$V2) > 
+            as.numeric(thresh))], keep.rownames = TRUE)
+        rank0 <- merge(rank0, rank, by = "V1", all = TRUE)
+        colnames(rank0)[i] <- cell
+        i = i + 1
+    }
+    vars <- PC
+    rank0$family = rep(NA, length(rank0$V1))
+    for (i in 1:length(rank0$V1)) {
+        rank0$family[i] = as.character(db.name.couple[which(db.name.couple[, 
+            1] == rank0$V1[i]), 2])
+    }
+    melted <- melt(rank0, id.vars = c("V1", "family"))
+    melted$family[is.na(melted$family)] <- "NA"
+    melted = melted %>% arrange(family, variable)
+    melted <- melted %>% mutate(row = group_indices_(melted, 
+        .dots = c("family", "V1")))
+    melted <- melted %>% mutate(col = group_indices_(melted, 
+        .dots = c("variable")))
+    vars_x_axis <- c(melted %>% arrange(col) %>% select(variable) %>% 
+        distinct())$variable
+    names_y_axis <- c(melted %>% arrange(row) %>% group_by(V1) %>% 
+        distinct(V1) %>% select(V1))$V1
+    plot <- ggplot(melted, aes(x = factor(col), y = factor(row), 
+        color = factor(family), size = value)) + geom_point() + 
+         scale_size_area(max_size = 8) + scale_x_discrete(breaks = 1:length(vars_x_axis), 
+        labels = vars_x_axis, position = "top") + scale_y_discrete(breaks = 1:length(names_y_axis), 
+        labels = names_y_axis) + scale_color_manual(values = family.col) + 
+        theme_classic() + labs(title = title) + theme(axis.line = element_blank(), 
+        axis.title = element_blank(), panel.border = element_blank(), 
+        panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank(), 
+        axis.text.y = element_text(size = 13, face="bold", colour = "black"), axis.text.x = element_text(angle = 90, face="bold", colour = "black"), 
+        axis.ticks.x = element_blank(), axis.ticks.y = element_blank())
+    return(plot)
+}
+pairs=c("CD80 / CD28", "HLA-DPA1 / LAG3", "HLA-DPB1 / LAG3", "HLA-DQA1 / LAG3", "HLA-DQA2 / LAG3", "HLA-DQB1 / LAG3", "HLA-DQB2 / LAG3","HLA-DRB5 / LAG3", "TNFSF4 / TNFRSF4", "NECTIN2 / CD226", "NECTIN3 / TIGIT", "PVR / TIGIT","PVR / CD96","PVR / PVRIG","CCL16 / CCR1","CCL16 / CCR5","CCL5 / CCR5" ,"PF4V1 / CXCR3", "TGFB2 / TGFBR1 + TGFBR2","TGFB3 / TGFBR1 + TGFBR2", "IL10 / IL10RA + IL10RB", "DLL1 / NOTCH3", "LGALS1 / CD69")
+lr2= lr_ind[which(rownames(lr_ind) %in% pairs),]
+ saveRDS(lr2, paste0(path, "selected_Pairs.Rds")) 
+  balloon=LR.balloon.plot(lr = lr2, PC = colnames(lr_ind), thresh = 0 , type="raw", db.name.couple=db.name.couple, title="MOST DIFFERENT L/R Pairs ")
+  
+  balloon1=icellnet::LR.balloon.plot(lr = lr2, PC = colnames(lr_ind), thresh =2 , type="raw", db.name.couple = db.name.couple,
+                                     title=paste0("MOST CONTRIBUTING L/R Pairs to the score - cutoff ", round(0.02*max(Scores[cell,])))) 
+balloon1=LR.balloon.plot(lr = lr, PC = colnames(lr), thresh =0 , type="raw", db.name.couple = db.name.couple,     title="title") 
+ ggsave(filename=paste0("BALOON_MOSTSIGNFICANT_withoutText_",Sys.Date(),".png"), plot=balloon1, device="png",        path= path, height=7, width=10, units="in", dpi=500)
+```
