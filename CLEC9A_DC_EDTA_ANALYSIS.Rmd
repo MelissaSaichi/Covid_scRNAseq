@@ -1,0 +1,119 @@
+---
+title: "CLEC9A_DC_EDTA_ANALYSIS"
+author: "MELISSA"
+date: "14/12/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+MAIN FIGURE 5:DC:
+```{r}
+path="C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/COVID_EDTA_12122020/FIGURE_6/"
+
+library(dplyr)
+Idents(edta)="celltype"
+cdc2= subset(edta, idents="CLEC9a+ DC") 
+##
+DefaultAssay(cdc2)="SCT"
+
+cdc2=cdc2%>% FindVariableFeatures()%>% RunPCA( ) %>%  FindNeighbors(., dims = 1:30)  %>% FindClusters(., resolution = 0.8)  %>% RunUMAP(., dims = 1:30)
+```
+
+REMOVE THE YOUNG CONTROL
+```{r}
+Idents(cdc2)="orig.ident"
+cdc2= SubsetData(cdc2, ident.remove ="CTRL_06_01_EDTA") 
+##
+DefaultAssay(cdc2)="SCT"
+cdc2=cdc2 %>% FindVariableFeatures()%>% RunPCA( ) %>%  FindNeighbors(., dims = 1:30)  %>% FindClusters(., resolution = 0.8)  %>% RunUMAP(., dims = 1:30)
+##
+DefaultAssay(cdc2)="RNA"
+fem= WhichCells( cdc2, expression = XIST > 0.1)
+cdc2$gender= ifelse(colnames(cdc2) %in% fem, "Female", "Male")
+
+```
+
+```{r}
+getPalette = colorRampPalette(brewer.pal(8, "Dark2"))
+p2=DimPlot(cdc2, group.by = "orig.ident", cols= getPalette(length(unique(cdc2$orig.ident))),label.size = 6, pt.size = 0.8) +theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+
+ggsave(filename=paste0("SUBCLUSTERED_EDTA_SCT_merged_cdc2_UMAP_Patient_",Sys.Date(),".png"), plot=p2, device="png",
+       path= path, height=5, width=5, units="in", dpi=500)
+
+#####
+getPalette = colorRampPalette(brewer.pal(6, "Dark2"))
+cols= getPalette(length(unique(cdc2$severity)))
+p3=DimPlot(cdc2, group.by = "severity", cols= getPalette(length(unique(cdc2$severity))), label.size = 6, pt.size = 0.8, label.color = "black", label.box = T) +theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+
+ggsave(filename=paste0("SUBCLUSTERED_EDTA_SCT_cdc2_UMAP_Severity_2_",Sys.Date(),".png"), plot=p3, device="png",
+       path= path, height=5, width=5, units="in", dpi=500)
+```
+
+
+```{r}
+DefaultAssay(cdc2)="RNA"
+Idents(cdc2)="severity"
+levels(cdc2)=c("Healthy", "Moderate", "Severe")
+pm=FindAllMarkers(cdc2, only.pos = TRUE , logfc.threshold = 0.25, test.use = "LR", latent.vars = "gender", min.pct = 0.1) %>% filter(., p_val_adj<0.05) %>%  .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),] 
+top10 <-pm %>% group_by(cluster) %>% top_n(n = 20, wt = avg_logFC)
+###
+avge=AverageExpression(object = cdc2, features = unique(top10$gene), assay="RNA", return.seurat = T)
+levels(avge)= c("Healthy", "Moderate", "Severe")
+
+plot <- DoHeatmap(avge, group.colors=cols, features = rownames(avge),  assay = "RNA", slot= "scale.data", combine = T,draw.lines=F,  hjust = 0.1, angle = 0) + scale_fill_gradientn(colors = rev(RColorBrewer::brewer.pal(n = 10, name = "RdBu")))+ 
+  theme (axis.text.x = element_text(size=10, face="bold", colour = "black",angle = 0),axis.text.y = element_text(size=12, face="bold", colour = "black",angle = 0),legend.text = element_text(face = "bold", size = 6))
+###
+ggsave(filename=paste0("HEATMAP_DEG_CLEC9A_TOP10_",Sys.Date(),".png"), plot=plot, device="png",path= path, height=10, width=6, units="in", dpi=500)
+```
+
+
+```{r}
+DefaultAssay(cdc2)="RNA"
+p <-VlnPlot(cdc2, features= c("AREG","MZB1", "SEPT7", "IFNGR1"), group.by = "severity", cols =cols, pt.size = 0, combine = F )
+for(i in 1:length(p)) {
+  p[[i]] <- p[[i]] + NoLegend()+
+  stat_summary(fun= median, geom='point', size = 3, colour = "black", shape = 95) +
+   stat_compare_means(label = "p.signif", method = "wilcox.test", ref.group = "Healthy",aes(label=..p.adj..)) +
+  theme (axis.text.x = element_text(size=9, face="bold", colour = "black",angle = 0, hjust = 0.1),axis.text.y = element_text(size=10, face="bold", colour = "black",angle = 0),legend.text = element_text(face = "bold", size = 4)) }
+g2=cowplot::plot_grid(plotlist = p, ncol = 2)
+##
+ggsave(filename=paste0("EDTA_VLNPLOT_cdc2_DEG_GENES_",Sys.Date(),".png"), plot=g, device="png",
+       path= path, height=8, width=8, units="in", dpi=500)
+```
+
+```{r}
+table(cdc2$category)
+
+ Idents(cdc2)= "orig.ident"
+cdc2=SubsetData(cdc2, ident.remove = "CTRL_06_01_EDTA")
+
+ Idents(cdc2)= "category"
+ levels(cdc2)= c("CTRL_02021_Healthy", "CTRL_02022_Healthy","01_052_Moderate" ,"05_01_J1_Moderate" , "05_01_J4_Moderate","05_02_Moderate", "01_049_Severe","01_054_J0_Severe","01_040_J2_Severe" ,"03_001_J1_Severe", "03_01_J5_Severe","P037_J0_Severe"   ,  "P037_J4_Severe"  )
+#cols=cols=c(rep("#1B9E77",2), rep("#AD4C9E",4), rep("#E6AB02",7))
+ 
+ getPalette = colorRampPalette(brewer.pal(12, "Paired"))
+cols= getPalette(length(unique(cdc2$category)))
+
+ p <-VlnPlot(cdc2, features= c("HLA-DQA2", "IFNGR1"),  pt.size = 0, combine = F , cols = cols, group.by = "severity")
+for(i in 1:length(p)) {
+  p[[i]] <- p[[i]] + NoLegend()+
+  stat_summary(fun= median, geom='point', size = 3, colour = "black", shape = 95) +
+  # stat_compare_means(label = "p.signif", method = "wilcox.test", ref.group = "Healthy",aes(label=..p.adj..)) +
+  theme (axis.text.x = element_text(size=9, face="bold", colour = "black",angle = 90, hjust = 0.1),axis.text.y = element_text(size=10, face="bold", colour = "black",angle = 0),legend.text = element_text(face = "bold", size = 4)) }
+g=cowplot::plot_grid(plotlist = p, ncol = 1)
+
+
+ggsave(filename=paste0("EDTA_VLNPLOT_cdc2_HLA_IFNGR_",Sys.Date(),".png"), plot=g, device="png",
+       path= path, height=7, width=9, units="in", dpi=500)
+
+```
+```{r}
+Idents(cdc2)="orig.ident"
+cdc2=SubsetData(cdc2, ident.remove = "01_040_J2")
+
+```
+
+
