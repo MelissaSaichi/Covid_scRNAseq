@@ -1,0 +1,872 @@
+---
+title: "EDTA_ANALYSIS"
+author: "MELISSA"
+date: "02/12/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+    modify_vlnplot<- function(obj, 
+                          feature, 
+                          pt.size = 0, 
+                          plot.margin = unit(c(-0.75, 0, -0.75, 0), "cm"),
+                          ...) {
+  p<- VlnPlot(obj, features = feature, pt.size = pt.size,cols = getPalette(length(unique(edta$celltype))), ... )  + 
+    xlab("") + ylab(feature) + ggtitle("") + 
+    theme(legend.position = "none", legend.text = element_text(angle=90),
+          axis.text.x = element_blank(), 
+          axis.ticks.x = element_blank(), 
+          axis.title.y = element_text(size = rel(1), angle = 0, face="bold"), 
+          axis.text.y = element_text(size = rel(1),face="bold", angle = 0), 
+          plot.margin = plot.margin ) 
+  
+  return(p)}
+
+extract_max<- function(p){
+  ymax<- max(ggplot_build(p)$layout$panel_scales_y[[1]]$range$range)
+  return(ceiling(ymax))}
+## main function
+StackedVlnPlot<- function(obj, features,
+                          pt.size = 0, 
+                          plot.margin = unit(c(-0.75, 0, -0.75, 0), "cm"),
+                          ...) {
+  
+  plot_list<- purrr::map(features, function(x) modify_vlnplot(obj = obj,feature = x, ...))
+  
+  # Add back x-axis title to bottom plot. patchwork is going to support this?
+  plot_list[[length(plot_list)]]<- plot_list[[length(plot_list)]] +
+    theme(axis.text.x=element_text(), axis.ticks.x = element_line())
+  
+  # change the y-axis tick to only max value 
+  ymaxs<- purrr::map_dbl(plot_list, extract_max)
+  plot_list<- purrr::map2(plot_list, ymaxs, function(x,y) x + 
+                            scale_y_continuous(breaks = c(y)) + 
+                            expand_limits(y = y))
+
+  p<- patchwork::wrap_plots(plotlist = plot_list, ncol = 1)
+  return(p)
+}
+```
+
+
+START WITH EDTA:
+```{r}
+Idents(COVID_merged)="condition"
+edta= subset(COVID_merged, idents="EDTA")
+s1=countable(edta$orig.ident, edta$celltype)
+write.csv(s1, paste0(path,"improved_CELLTYPE_PATIENT_EDTA.csv"))
+s2= countable( edta$celltype,edta$condition)
+write.csv(s2, paste0(path,"improved_CELLTYPE_CONDITION_EDTA.csv"))
+s3= countable( edta$severity, edta$celltype)
+write.csv(s3, paste0(path,"improved_CELLTYPE_SEVERITY_EDTA.csv"))
+```
+redo clustering on EDTA:
+```{r}
+path= "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/COVID_EDTA_12122020/FIGURE_1/"
+library(RColorBrewer)
+DefaultAssay(edta)="SCT"
+edta2=edta %>% RunPCA( ) %>%  FindNeighbors(., dims = 1:30)  %>% FindClusters(., resolution = 1.2)  %>% RunUMAP(., dims = 1:30)
+
+###
+getPalette = colorRampPalette(brewer.pal(6, "Set1"))
+p1=DimPlot(edta, group.by = "celltype", cols= getPalette(length(unique(edta$celltype))), label.size = 6, pt.size = 0.8, label.color = "black", label.box = T) +   theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold", size = 12) )
+##
+ggsave(filename=paste0("SUBCLUSTERED_EDTA_SCT_APC_UMAP_CELLTYPE_",Sys.Date(),".png"), plot=p1, device="png",
+       path= path, height=8, width=8, units="in", dpi=500)
+
+#######
+getPalette = colorRampPalette(brewer.pal(8, "Dark2"))
+p2=DimPlot(edta, group.by = "orig.ident", cols= getPalette(length(unique(edta$orig.ident))),label.size = 6, pt.size = 0.8)+   theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+
+ggsave(filename=paste0("SUBCLUSTERED_EDTA_SCT_merged_APC_UMAP_Patient_",Sys.Date(),".png"), plot=p2, device="png",
+       path= path, height=8, width=8, units="in", dpi=500)
+
+#####
+getPalette = colorRampPalette(brewer.pal(6, "Dark2"))
+p3=DimPlot(edta, group.by = "severity", cols= getPalette(length(unique(edta$severity))), label.size = 6, pt.size = 0.5, label.color = "black", label.box = T) +   theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold", size = 12) )
+##
+ggsave(filename=paste0("SUBCLUSTERED_EDTA_SCT_APC_UMAP_Severity_2_",Sys.Date(),".png"), plot=p3, device="png",
+       path= path, height=8, width=8, units="in", dpi=500)
+```
+
+
+
+```{r}
+path= "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/COVID_EDTA_12122020/FIGURE_1/"
+edtadata= as.data.frame(table(edta$celltype))
+edtadata$Freq= round(edtadata$Freq/sum(edtadata$Freq),3)*100
+
+edtadata$ymax = cumsum(edtadata$Freq)
+edtadata$ymin = c(0, head(edtadata$ymax, n=-1))
+
+g=ggplot(data = edtadata, 
+       aes(x = 2, y = Freq, fill = Var1))+
+  geom_bar(stat = "identity")+
+  coord_polar("y", start = 400) +
+ # geom_text(aes(y = Freq, label = paste(Freq,"%", sep = "")), col = "white") +
+   theme_void() +
+   scale_fill_brewer(palette = "Set1")+
+   xlim(.2,2.5)
+ggsave(filename=paste0("NOTSUBCLUSTERED_EDTA_SCT_APC_UMAP_Severity_2_DONUT_",Sys.Date(),".png"), plot=g, device="png",
+       path= path, height=8, width=8, units="in", dpi=500)  
+```
+
+compute silhouette scores:
+```{r}
+library(cluster, quietly = TRUE)
+dist.matrix <- dist(x = Embeddings(object = edta[["pca"]])[, 1:30])
+clusters <- edta$seurat_clusters
+
+sil <- silhouette(x = as.numeric(x = as.factor(x = clusters)), dist = dist.matrix)
+edta$sil_clusters <- sil[, 3]
+
+######
+library(viridis)
+p2= FeaturePlot(edta, "sil_clusters",label.size = 6, pt.size = 0.8) + scale_color_viridis(option="B")
+
+ggsave(filename=paste0("EDTA_UMAP_SILHOUETTESCORE_Clusters_",Sys.Date(),".png"), plot=p2, device="png",
+       path= "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/INTEGRATED_ALL/", height=8, width=8, units="in", dpi=500)
+```
+
+
+```{r}
+saveRDS(edta,"C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/COVID_EDTA_RPMI_RDS/EDTA_12122020.Rds" )
+edta=readRDS("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/COVID_EDTA_RPMI_RDS/EDTA_12122020.Rds" )
+```
+
+
+DO IT FOR SUBCLUSTERING CELL TYPES ONLY
+```{r}
+preprocess=function(x) {
+  DefaultAssay(x)="RNA"
+    x <- NormalizeData(x)
+   x <- FindVariableFeatures(x, selection.mewthod = "vst", nfeatures = 3000)
+    x= ScaleData(x) #, features = nrow(x)
+    x= RunPCA(x )
+     x <- FindNeighbors(x, dims = 1:30)
+    x <- FindClusters(x, resolution = 0.8)
+   x<- RunUMAP(x, dims = 1:30)}
+
+edta=preprocess(edta)
+```
+
+```{r}
+library(vegan)
+hm= as.data.frame(t(countable(edta$celltype, edta$orig.ident)))
+entropy= diversity(hm, index = "shannon")
+```
+
+
+Redo a subclustering according to Severity:
+```{r}
+Idents(edta)="severity"
+library(RColorBrewer)
+getPalette = colorRampPalette(brewer.pal(6, "Set1"))
+
+hc= subset(edta, idents = "Healthy")
+h= DimPlot(hc,  group.by = "celltype", cols =  getPalette(length(unique(hc$celltype))), label.size = 6, pt.size = 0.5, label.color = "black", label.box = T ) +NoLegend() +ggtitle("Healthy Donors") +   theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+###
+severe= subset(edta, idents = "Severe")
+
+s= DimPlot(severe, reduction = "umap", group.by = "celltype",cols=getPalette(length(unique(severe$celltype))), label.size = 6, pt.size = 0.5, label.color = "black", label.box = T )+ggtitle("Severe COVID-19")+   theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+##
+moderate= subset(edta, idents = "Moderate")
+
+m= DimPlot(moderate, reduction = "umap", group.by = "celltype", cols=getPalette(length(unique(moderate$celltype))), label.size = 6, pt.size = 0.5, label.color = "black", label.box = T ) +ggtitle("Moderate COVID-19")+NoLegend()+   theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+p=h+m+s
+
+ggsave(filename=paste0("EDTA_UMAP_SEVERITY_SPLIT_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=6, width=12, units="in", dpi=500)
+
+```
+
+Panel 1-B: STUCKED VIOLIN PLOT
+```{r}
+DefaultAssay(edta)="RNA"
+svp=subset(edta, CD3E < 0.1)
+
+features<- c("CD14", "FCGR3A", "CLEC9A", "CD1C", "CLEC4C", "IL3RA","AXL", "SIGLEC6", "HLA-DRB5", "ITGAX","CD86", "CD3E", "CD79A", "NKG7")
+Idents(svp)="celltype"
+DefaultAssay(svp)="RNA"
+p=StackedVlnPlot(obj = svp, features = features)+ theme( legend.text = element_text(color = "black", size = 10), face = "bold") 
+
+ggsave(filename=paste0("EDTA_UMAP_SEVERITY_SPLIT_StuckVln_improved",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=15, width=13, units="in", dpi=300)
+```
+
+```{r}
+library(Seurat)
+ female= WhichCells(edta, expression =  XIST > 0.1)
+edta$gender= ifelse(colnames(edta) %in% female, "Female", "Male" ) 
+```
+
+
+#####
+A: Heatmap of DEG per severity group:
+```{r}
+Idents(edta)="severity"
+DefaultAssay(edta)="RNA"
+library(dplyr)
+BiocManager::install("MAST")
+library("MAST")
+j0.markers <- FindAllMarkers(edta, only.pos = TRUE, logfc.threshold = 0.25 , test.use = "MAST" ) 
+j0.markers = j0.markers %>% filter(.,p_val_adj<0.05 ) %>% .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),]
+
+top50 <-j0.markers %>% group_by(cluster) %>% top_n(n = 50, wt = avg_logFC)
+##
+levels(edta) <- c("Healthy", "Moderate", "Severe")
+edta=ScaleData(edta, assay = "RNA", features = rownames(edta))
+getPalette = colorRampPalette(brewer.pal(6, "Dark2"))
+##
+plot1 <- DoHeatmap(edta, features = rownames(j0.markers), group.colors=getPalette(length(unique(edta$severity))), assay = "RNA", slot = "scale.data", angle = 0) +  scale_fill_gradientn(colors = rev(RColorBrewer::brewer.pal(n = 10, name = "RdBu"))) +   theme (axis.text.x = element_text(size=12, face="bold", colour = "black", hjust = 0.1),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+
+ggsave(filename=paste0("EDTA_HEATMAP_SEVERITY_",Sys.Date(),".png"), plot=plot1, device="png",
+       path= path, height=8, width=8, units="in", dpi=500)
+###
+write.csv(j0.markers, paste0(path,"DEG_ALL_SEVERITY_EDTA_UP.csv"))
+```
+
+https://davemcg.github.io/post/lets-plot-scrna-dotplots/
+
+B: number of DEG per condition:
+```{r}
+path=  "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/COVID_EDTA_12122020/FIGURE_2/"
+library(dplyr)
+Idents(edta)= "severity"
+severitymarkers <- FindAllMarkers(edta, only.pos = F, logfc.threshold = 0.25) %>% filter(.,p_val_adj<0.05 ) %>% .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),]
+severitymarkers$fc= ifelse(severitymarkers$avg_logFC<0, "Downregulated", "Upregulated")
+
+write.csv(severitymarkers, paste0(path,"DEG_ALL_SEVERITY_EDTA.csv"))
+
+res=as.data.frame.matrix(table(severitymarkers$cluster, severitymarkers$fc))
+res$severity=rownames(res)
+dat=reshape::melt(res)
+dat <- dat %>%
+  mutate(ifelse(dat$variable=="Upregulated",value,-1* value ))
+colnames(dat)=c(colnames(dat[,1:3]),"Number_DEG")
+p= ggplot(dat, aes(y = Number_DEG, x= severity, fill = variable))+
+  geom_bar(stat = "identity") + theme_classic() +scale_fill_manual(values=c('#999999','black'))
+##
+ggsave(filename=paste0("BARPLOT_DEG_ALLvsALL_SEVERITY_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=5, width=5, units="in", dpi=500)
+```
+
+###representation as a VENN DIAGRAM:
+```{r}
+ library("ggVennDiagram")
+
+x= list(Up_HD=j0.markers[which(j0.markers$cluster== "Healthy"),7], Up_Moderate=j0.markers[which(j0.markers$cluster== "Moderate"),7], Up_Severe=j0.markers[which(j0.markers$cluster== "Severe"),7])
+p=ggVennDiagram(x) + scale_fill_gradient(low="white",high = "red")
+ggsave(filename=paste0("VENNDIAGRAM_UP_ALLvsALL_SEVERITY_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=6, width=6, units="in", dpi=500)
+```
+
+PERFORM PATHWAY ENRICHMENT ANALYSIS:
+
+```{r}
+
+BiocManager::install("org.Hs.eg.db")
+devtools::install_github("tidyverse/tidyverse")
+library(tidyverse)
+library("org.Hs.eg.db")
+
+#DEG_ALL_SEVERITY_EDTA_UP <- read_csv("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/INTEGRATED_ALL/DEG_ALL_SEVERITY_EDTA_UP.csv") 
+#DEG_ALL_SEVERITY_EDTA_UP =column_to_rownames(DEG_ALL_SEVERITY_EDTA_UP,"X1")
+
+#
+#suppressPackageStartupMessages(library(pathfindR))
+library(pathfindR)
+pathgenes= j0.markers[which(j0.markers$cluster== "Severe"),c(2,5)] %>% rownames_to_column(., var="Gene_Symbol")
+
+pathoutput= run_pathfindR(pathgenes, gaThread= 6, gene_sets = c("KEGG","GO-All"), visualize_enriched_terms=F,  silent_option = TRUE)
+write.csv(pathoutput, paste0(path, "UP_SEVERE_ENRICHMENT_PaTHFINDR_TOP10.csv"), sep=",")
+ p=pathfindR::enrichment_chart(pathoutput)+   theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=12, face="bold", colour = "black") )+ scale_color_viridis(option="D")
+##
+ ggsave(filename=paste0("ENRICHMENT_TOP10_UP_SEVERE_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=8, width=8, units="in", dpi=500)
+```
+
+
+DEG: Severe vs Healthy
+```{r}
+Idents(edta)="severity"
+DefaultAssay(edta)="RNA"
+hs= FindMarkers(edta, ident.1 = "Severe", ident.2 = "Healthy", logfc.threshold = 0.25, only.pos = T, test.use = "LR", latent.vars = "gender") %>% filter(.,p_val_adj<0.05 ) %>% .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),]
+#deg1(hs, "Upregulated_SeverevsHealthy", "purple")
+write.csv(hs, paste0(path, "UP_SEVERE_vsHEALTHY.csv"))
+## run pathfinder:
+#UP_SEVERE_vsHEALTHY =column_to_rownames(UP_SEVERE_vsHEALTHY,"X1")
+########################
+##########################
+pathgenes= hs[,c(2,5)] %>% rownames_to_column(., var="Gene_Symbol")
+
+pathoutput= run_pathfindR(pathgenes, gaThread= 6, gene_sets = c("KEGG","GO-All"), visualize_enriched_terms=F,  silent_option = TRUE, output_dir = paste0(path, "pathfindR_Results_UpSeverevsHealthy"))
+write.csv(pathoutput, paste0(path, "UP_SEVEREvsHD__ENRICHMENT_PaTHFINDR_TOP10.csv"), sep=",")
+###
+ p=pathfindR::enrichment_chart(pathoutput)+   theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=12, face="bold", colour = "black") ) + scale_color_viridis(option="D")
+##
+ ggsave(filename=paste0("ENRICHMENT_TOP10_UP_SEVEREvsHD_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=8, width=9, units="in", dpi=500)
+ ##
+ p=pathfindR::cluster_enriched_terms(pathoutput[1:10,], use_description=T)
+
+```
+
+DEG moderate vs healthy:
+```{r}
+hm= FindMarkers(edta, ident.1 = "Moderate", ident.2 = "Healthy", logfc.threshold = 0.25, only.pos = T, test.use = "LR", latent.vars = "gender") %>% filter(.,p_val_adj<0.05 ) %>% .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),]
+write.csv(hm, paste0(path, "UP_MODERATE_vsHEALTHY.csv"))
+
+#hm =column_to_rownames(hm,"X1")
+###
+pathgenes_hm= hm[,c(2,5)] %>% rownames_to_column(., var="Gene_Symbol")
+
+pathoutput_hm= run_pathfindR(pathgenes_hm, gaThread= 6, gene_sets = c( "Reactome","GO-All"), visualize_enriched_terms=F,  silent_option = TRUE, output_dir = paste0(path, "pathfindR_Results_UpMODERATEvsHealthy"))
+
+write.csv(pathoutput_hm, paste0(path, "UP_MODERATEvsHD_ENRICHMENT_PaTHFINDR_TOP10.csv"))
+###
+ p=pathfindR::enrichment_chart(pathoutput_hm)
+ 
+ ###
+ library(ggpubr)
+ pathoutput_hm= pathoutput_hm[order(pathoutput_hm$Fold_Enrichment, decreasing = T),] 
+ pe= pathoutput_hm[1:20,]
+
+ g=ggplot(data=pe, aes( x=reorder(Term_Description,-Fold_Enrichment) , y=Fold_Enrichment)) +
+  geom_bar(stat="identity") + coord_flip() + xlab("Enriched Pathways") + ylab("Fold_Enrichment") +
+  theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=12, face="bold", colour = "black"), legend.text = element_text(size=12, face="bold", colour = "black"), panel.background = element_blank() ) + scale_color_viridis(option="D")
+#####
+ ggsave(filename=paste0("ENRICHMENT_TOP20_UP_MODERATEvsHD_",Sys.Date(),".png"), plot=g, device="png",
+       path= path, height=8, width=10, units="in", dpi=500)
+
+```
+
+DEG Healthy vs MODERATE AND SEVERE
+```{r}
+Idents(edta)="severity"
+hd= FindMarkers(edta, ident.1 = c("Moderate", "Severe"), ident.2 = "Healthy", logfc.threshold = 0.25, only.pos = T, test.use = "LR", latent.vars = "gender") %>% filter(.,p_val_adj<0.05 ) %>% .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),]
+write.csv(hd, paste0(path, "UP_COVID_vsHEALTHY.csv"))
+```
+
+
+DEG SEVERE vs MODERATE
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tidyselect)
+library(tidyverse)
+library(pathfindR)
+Idents(edta)="severity"
+DefaultAssay(edta)="RNA"
+sm= FindMarkers(edta, ident.2 = "Moderate", ident.1 = "Severe", logfc.threshold = 0.25, only.pos = F)%>% filter(.,p_val_adj<0.05 ) %>% .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),]
+write.csv(sm, paste0(path, "DEG_SEVERE_vsMODERATE.csv"))
+######
+
+#sm =column_to_rownames(sm,"X1")
+###
+pathgenes_sm= sm[,c(2,5)] %>% rownames_to_column(., var="Gene_Symbol")
+
+pathoutput_sm= run_pathfindR(pathgenes_sm, gaThread= 6, gene_sets = c( "Reactome","GO-All"), visualize_enriched_terms=F,  silent_option = TRUE, output_dir = paste0(path, "pathfindR_Results_SeverevsModerate"))
+
+write.csv(pathoutput_sm, paste0(path, "UP_MODERATEvsHD_ENRICHMENT_PaTHFINDR_TOP10.csv"))
+###
+ p=pathfindR::enrichment_chart(pathoutput_sm)
+
+ dat=pathoutput_sm
+ 
+ dat$fc=ifelse(length(unlist(strsplit(dat$Up_regulated, ","))) > length(unlist(strsplit(dat$Down_regulated, ","))),  "Enriched in Severe","Enriched in Moderate")
+ 
+ dat= dat [, c(2,3,10)]
+ dat=reshape::melt(dat)
+ dat <- dat %>%
+  mutate(ifelse(dat$fc=="Enriched in Severe",value,-1* value ))
+colnames(dat)=c(colnames(dat[,1:4]),"FC")
+
+dat=dat[order(dat$value, decreasing = T),]
+
+p= ggplot(dat[1:20,], aes(y = FC, x= reorder(Term_Description, FC), fill = fc))+
+  geom_bar(stat = "identity") + theme_classic() +scale_fill_manual(values=c("#AD4C9E","#E6AB02"))+ xlab("Enriched Pathways") + ylab("Fold_Enrichment") + coord_flip()+
+  theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black") ) + ggtitle("Enriched pathways in Severe_Moderate")
+###
+ggsave(filename=paste0("ENRICHMENT_UP_SEVEREvsMODERATE_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=5, width=10, units="in", dpi=500)
+```
+
+CLN PLOT SEVERE VS MODERATE
+
+
+```{r}
+library(ggrepel)
+sm$gene=rownames(sm)
+smp= sm %>% filter(., avg_logFC > 0.25)
+smp= smp[order(smp$avg_logFC, decreasing=T),]
+smp$rank= seq(1:nrow(smp))
+
+p=ggplot(smp, aes(x= rank, y=avg_logFC)) +geom_point(col="red") + geom_text_repel(
+    data = subset(smp, avg_logFC > 0.6),
+    aes(label = gene),
+    size = 5,
+    box.padding = unit(0.35, "lines"),
+    point.padding = unit(0.3, "lines")) +
+  theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black") ) + ggtitle("Upregulated Genes in Severe APC vs Moderate")
+##♠
+ggsave(filename=paste0("RANKED_PLOT_UPSevere_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=5, width=8, units="in", dpi=500)
+#########################################
+########################################
+
+smn= sm %>% filter(., avg_logFC < -(0.25))
+smn= smn[order(abs(smn$avg_logFC), decreasing=T),]
+smn$rank= seq(1:nrow(smn))
+smn$abs_avg_logFC=abs(smn$avg_logFC)
+
+
+p=ggplot(smn, aes(x= rank, y=abs_avg_logFC)) +geom_point(col="blue") + geom_text_repel(
+    data = subset(smn, abs_avg_logFC > 0.9),
+    aes(label = gene),
+    size = 5,
+    box.padding = unit(0.35, "lines"),
+    point.padding = unit(0.3, "lines")) +
+  theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black") ) + ggtitle("Downregulated Genes in Severe APC vs Moderate")
+##♠
+ggsave(filename=paste0("RANKED_PLOT_UPModerate_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=5, width=8, units="in", dpi=500)
+```
+
+
+Perform MSIGDB pathway enrichment:
+```{r}
+library(clusterProfiler)
+library(msigdbr)
+m_t2g <- msigdbr(species = "Homo sapiens", category = "H") 
+m_t2g =m_t2g %>% dplyr::select(gs_name, gene_symbol) %>% as.data.frame()
+```
+
+
+```{r}
+deg1=function(data, X, Y){ #X: output of FindMarkers function, Y: Color of the bars
+hpp=data[which(data$avg_logFC < (-0.25)),] 
+egmtp <- enricher(rownames(data) , TERM2GENE=m_t2g) ##WORKED ::
+###
+res.hp=egmtp@result
+##
+res.hp=res.hp[which(res.hp$p.adjust< 0.05),]
+
+res.hp=res.hp[,c(1,6)]
+res.hp$ID= gsub("HALLMARK_", "", res.hp$ID)
+res.hp$state=rep(X,nrow(res.hp))
+res.hp$p.adjust=-log10(res.hp$p.adjust)
+ p= ggplot(res.hp, aes(y = p.adjust, x= reorder(ID, -p.adjust), fill = state))+
+  geom_bar(stat = "identity", width=0.3)+ scale_fill_manual(values=c(Y))+
+  theme_classic()  + coord_flip()  +
+  theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=12, face="bold", colour = "black") ) +
+  xlab("Enriched Pathways") + ylab("-Log10(adjPvalue") +ggtitle(X)
+ return(p)
+}
+
+```
+
+
+
+```{r}
+p=deg1(hm, "Upregulated_ModeratevsHealthy", "#AD4C9E")
+ggsave(filename=paste0("MSIG_Upregulated_ModeratevsHealthy_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=7, width=9, units="in", dpi=500)
+###
+
+p=deg1(hs, "Upregulated_SeverevsHealthy", "#E6AB02")
+ggsave(filename=paste0("MSIG_UpregulatedSeverevsHealthy_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=7, width=9, units="in", dpi=500)
+###
+p=deg1(sm, "Upregulated_SeverevsModerate", "grey")
+ggsave(filename=paste0("MSIG_UpregulatedSeverevsModerate_",Sys.Date(),".png"), plot=p, device="png",
+       path= path,height=7, width=9, units="in", dpi=500)
+###
+p=deg1(sm, "Downregulated_SeverevsModerate", "black")
+ggsave(filename=paste0("MSIG_Downregulated_SeverevsModerate_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=7, width=9, units="in", dpi=500)
+```
+
+```{r}
+sm= FindMarkers(edta, ident.2 = "Moderate", ident.1 = "Severe", logfc.threshold = 0.25, only.pos = T)%>% filter(.,p_val_adj<0.05 ) %>% .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),]
+p2=deg1(sm, "Unriched in Severe vs Moderate", "grey")
+####
+sm2= FindMarkers(edta, ident.1 = "Moderate", ident.2 = "Severe", logfc.threshold = 0.25, only.pos = T)%>% filter(.,p_val_adj<0.05 ) %>% .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),]
+p=deg1(sm2, "Unriched in Moderate vs Severe", "black")
+###############################################
+us=enricher(rownames(sm) , TERM2GENE=m_t2g) @result %>% filter(., p.adjust< 0.05) %>% .[,c(1,6)]
+us$ID= gsub("HALLMARK_", "",us$ID)
+us$p.adjust=-log10(us$p.adjust)
+us$state= rep("Up_Severe", nrow(us))
+####
+um=enricher(rownames(sm2) , TERM2GENE=m_t2g) @result %>% filter(., p.adjust< 0.05) %>% .[,c(1,6)]
+um$ID= gsub("HALLMARK_", "",um$ID)
+um$p.adjust=-log10(um$p.adjust)
+um$state= rep("Up_Moderate", nrow(um))
+####
+dat=rbind(us,um)
+dat= reshape::melt(dat)
+dat <- dat %>%
+  mutate(ifelse(dat$state=="Up_Severe",value,-1* value ))
+
+colnames(dat)=c(colnames(dat[,1:4]),"Adj.Pvalue")
+
+dat=dat[order(dat$value, decreasing = T),]
+
+p= ggplot(dat, aes(y = Adj.Pvalue, x= reorder(ID, Adj.Pvalue), fill = state))+
+  geom_bar(stat = "identity") + theme_classic() +scale_fill_manual(values=c("#AD4C9E","#E6AB02"))+ xlab("Enriched Pathways") + ylab("-log10(Adjusted_Pvalues)") + coord_flip()+
+  theme (axis.text.x = element_text(size=12, face="bold", colour = "black", angle = 90),axis.text.y = element_text(size=12, face="bold", colour = "black"),legend.text = element_text(face = "bold", size = 12 )) + ggtitle("Enriched pathways in Severe_Moderate")
+
+
+ggsave(filename=paste0("MSIG_SeverevsModerate_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=10, width=10, units="in", dpi=500)
+```
+
+
+Chech pathways enriched in Upregulated genes in severe vs Moderate:
+Construct heatmaps on genes involved in enriched pathways:
+```{r}
+egmtp <- enricher(rownames(sm[which(sm$avg_logFC >0),]), TERM2GENE=m_t2g)@result %>% filter(.,p.adjust< 0.05) 
+####
+kras=strsplit(egmtp[egmtp$ID=="HALLMARK_KRAS_SIGNALING_UP",8], split = "/")
+tnfa=strsplit(egmtp[egmtp$ID=="HALLMARK_TNFA_SIGNALING_VIA_NFKB",8], split = "/")
+hypoxia=strsplit(egmtp[egmtp$ID=="HALLMARK_HYPOXIA",8], split = "/")
+complement=strsplit(egmtp[egmtp$ID=="HALLMARK_COMPLEMENT",8], split = "/")
+##########################
+Idents(edta)= "severity"
+cols= getPalette(length(unique(edta$severity)))
+
+
+avge=AverageExpression(object = edta, features = unique(c(tnfa[[1]],kras[[1]] , hypoxia[[1]],complement[[1]] )), assay="RNA", return.seurat = T)
+levels(avge)= c("Healthy", "Moderate", "Severe")
+
+plot <- DoHeatmap(avge, group.colors=cols, features = rownames(avge),  assay = "RNA", slot= "scale.data", combine = T,draw.lines=F, hjust=F, angle = 0) + scale_fill_gradientn(colors = rev(RColorBrewer::brewer.pal(n = 10, name = "RdBu"))) +
+  theme (axis.text.x = element_text(size=12, face="bold", colour = "black",angle = 0),axis.text.y = element_text(size=10, face="bold", colour = "black",angle = 0))
+####
+ggsave(filename=paste0("MSIG_HEATMAP_AVG_Expression_",Sys.Date(),".png"), plot=plot, device="png",
+       path= path, height=10, width=6, units="in", dpi=500)
+```
+
+```{r}
+library(Seurat)
+library(RColorBrewer)
+getPalette = colorRampPalette(brewer.pal(6, "Dark2"))
+ cols= getPalette(length(unique(edta$severity)))
+           
+DefaultAssay(edta)="RNA"
+cytokines=c("IL1B", "IL1RN", "IL6R", "IL18",  "TNFRSF1A", "CXCL2", "IL10RA", "TGFB1","CXCR4","CXCL8" )
+cyto=c("IL1B", "CXCL8" , "TGFB1", "IL18", "IL6R",  "TNFRSF1A")
+library(ggpubr)
+p <- VlnPlot(edta, features = cytokines, group.by = "severity", pt.size = 0.5, combine = F, cols =cols)
+for(i in 1:length(p)) {
+  p[[i]] <- p[[i]] + NoLegend()+ 
+  theme (axis.text.x = element_text(size=12, face="bold", colour = "black",angle = 0, hjust = 0.5),axis.text.y = element_text(size=8, face="bold", colour = "black",angle = 0))+
+  stat_summary(fun= median, geom='point', size = 5, colour = "black", shape = 95) +
+   stat_compare_means(label = "p.signif", method = "wilcox.test", ref.group = "Healthy")}
+
+p1=cowplot::plot_grid(plotlist = p , ncol = 2)
+##
+ggsave(filename=paste0("Vln_Cytokines_6_",Sys.Date(),".png"), plot=p1, device="png",
+       path= path, height=9, width=9, units="in", dpi=500)
+```
+
+IFN AND IFN RELATED GENES;
+```{r}
+ifn=c("IFNL1","IFNLR1","IFNAR1","IFNAR2","IFNGR1","IFNGR2")
+###
+p <-FeaturePlot(edta, ifn, combine = F, cols = c("lightgrey", "red"))
+for(i in 1:length(p)) {
+  p[[i]] <- p[[i]] +NoAxes() }
+g=cowplot::plot_grid(plotlist = p, ncol = 2)
+
+ggsave(filename=paste0("FeaturePlot_IFN_",Sys.Date(),".png"), plot=g, device="png",
+       path= path, height=10, width=6, units="in", dpi=500)
+```
+
+
+check the downstream pathways:
+```{r}
+m_t2g[grep("IL1B", m_t2g$gene_symbol),1]
+m_t2g[grep("CXCL8", m_t2g$gene_symbol),1]
+m_t2g[grep("TGFB1", m_t2g$gene_symbol),1]
+####
+length(m_t2g[grep("HALLMARK_IL6_JAK_STAT3_SIGNALING", m_t2g$gs_name),1]) #87
+length(m_t2g[grep("HALLMARK_TGF_BETA_SIGNALING", m_t2g$gs_name),1]) #54
+length(m_t2g[grep("HALLMARK_IL6_JAK_STAT3_SIGNALING", m_t2g$gs_name),1]) #87
+length(m_t2g[grep("HALLMARK_P53_PATHWAY", m_t2g$gs_name),1]) 
+
+il6= list(intersect(m_t2g[grep("HALLMARK_IL6_JAK_STAT3_SIGNALING", m_t2g$gs_name),2],rownames(hd)))
+tgfb=list(intersect(m_t2g[grep("HALLMARK_TGF_BETA_SIGNALING", m_t2g$gs_name),2],rownames(hd)))
+inflam=list(intersect(m_t2g[grep("HALLMARK_INFLAMMATORY_RESPONSE", m_t2g$gs_name),2],rownames(hd)))
+p53= list(intersect(m_t2g[grep("HALLMARK_P53_PATHWAY", m_t2g$gs_name),2],rownames(hd)))
+#
+tnf= list(intersect(m_t2g[grep("HALLMARK_TNFA_SIGNALING_VIA_NFKB", m_t2g$gs_name),2],rownames(hd)))
+kras=list(intersect(m_t2g[grep("HALLMARK_KRAS_SIGNALING_UP", m_t2g$gs_name),2],rownames(hd)))
+###
+edta= AddModuleScore(edta, features = il6, name="IL6_JAK_STAT3_SIGNALING", ctrl = 100, nbin = 50 )
+edta= AddModuleScore(edta, features = tgfb, name="TGF_BETA_SIGNALING" , ctrl = 100, nbin = 50)
+edta= AddModuleScore(edta, features = inflam, name="INFLAMMATORY_RESPONSE", ctrl = 100, nbin = 50 )
+edta= AddModuleScore(edta, features = p53, name="P53_PATHWAY", ctrl = 100, nbin = 50 )
+edta= AddModuleScore(edta, features = tnf, name="TNFA_SIGNALING_VIA_NFKB", ctrl = 100, nbin = 50 )
+edta= AddModuleScore(edta, features = kras, name="KRAS_SIGNALING_UP", ctrl = 100, nbin = 50 )
+###
+library(ggplot2)
+pathways=c("IL6_JAK_STAT3_SIGNALING1","TGF_BETA_SIGNALING1","INFLAMMATORY_RESPONSE1","P53_PATHWAY1","TNFA_SIGNALING_VIA_NFKB1","KRAS_SIGNALING_UP1" )
+p=DotPlot(edta, features = pathways, dot.scale = 8, group.by = "severity") + scale_color_viridis(option="D") +
+  theme (axis.text.x = element_text(size=14, face="bold", colour = "black",angle = 90),axis.text.y = element_text(size=14, face="bold", colour = "black",angle = 0)) 
+##
+ggsave(filename=paste0("PATHWAYS_Severity_DOTPLOT_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=7, width=10, units="in", dpi=500)
+
+isg= c("MX1","CH25H", "IFITM2", "IFITM3", "TRIM22","TRIM5A","ISG15", "RNASEL" ,"OAS1", "RSAD2", "BST2", "SOCS1", "USP18","STAT1", "STAT2", "CGAS", "EIF2AK2", "IRF1", "IRF3", "IRF7", "IRF9", "TMEM173")
+sisg=c("MX2", "ISG15","IRF7","BST2","IFITM2","ADAR" )
+###
+library(viridis)
+p=DotPlot(edta, features = isg, dot.scale = 8, group.by = "severity") + scale_color_viridis(option="D")+ RotatedAxis() +
+  theme (axis.text.x = element_text(size=12, face="bold", colour = "black",angle = 0),axis.text.y = element_text(size=12, face="bold", colour = "black",angle = 0)) +
+ geom_hline(yintercept = c(7.5), linetype="dotted", color = "black", size=1.5) +coord_flip()
+##
+ggsave(filename=paste0("PATHWAYS_flipped_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=7, width=7, units="in", dpi=500)
+
+p <- VlnPlot(edta, features = sisg, group.by = "severity", pt.size = 0, combine = F, cols = cols)
+for(i in 1:length(p)) {
+  p[[i]] <- p[[i]] + NoLegend()+  theme (axis.text.x = element_text(size=8, face="bold", colour = "black",angle = 0, hjust = 0.1),axis.text.y = element_text(size=8, face="bold", colour = "black",angle = 0))+
+  stat_summary(fun= median, geom='point', size = 5, colour = "black", shape = 95) +
+   stat_compare_means(label = "p.signif", method = "wilcox.test", ref.group = "Healthy")}
+g=cowplot::plot_grid(plotlist = p, ncol = 2)
+#
+ggsave(filename=paste0("ISG_VLNPLOT2_",Sys.Date(),".png"), plot=g, device="png",
+       path= path, height=10, width=6, units="in", dpi=500)
+### try with heatmap:
+
+Idents(edta)= "severity"
+features= unique(c("IFNL1" , "IFNLR1", "IFNAR1" ,"IFNAR2", "IFNGR1", "IFNGR2","MX2", "ISG15","IRF7","BST2","IFITM2","ADAR")) #,"MX1","CH25H", "IFITM2", "IFITM3", "TRIM22","ISG15", "RNASEL" ,"OAS1", "RSAD2", "BST2", "SOCS1", "USP18","STAT1", "STAT2", "CGAS", "EIF2AK2", "IRF1", "IRF3", "IRF7", "IRF9", "TMEM173"
+
+avge=AverageExpression(object = edta, features = features, assay="RNA", return.seurat = T)
+
+levels(avge)= c("Healthy", "Moderate", "Severe")
+
+plot <- DoHeatmap(avge, group.colors=cols, features = rownames(avge),  assay = "RNA", slot= "scale.data", combine = T,draw.lines=F, hjust=0.1, angle = 0) + scale_fill_gradientn(colors = rev(RColorBrewer::brewer.pal(n = 10, name = "RdBu"))) +
+  theme (axis.text.x = element_text(size=12, face="bold", colour = "black",angle = 0),axis.text.y = element_text(size=10, face="bold", colour = "black",angle = 0))
+####
+ggsave(filename=paste0("HEATMAP_AVG_Expression_IFN_ISG",Sys.Date(),".png"), plot=plot, device="png",
+       path= path, height=9, width=6, units="in", dpi=500)
+
+```
+PLOT PCA BASED ON PSEUDOBULK:
+
+```{r}
+Idents(edta)="orig.ident"
+avg= AverageExpression(edta, features=rownames(edta), return.seurat = F, add.ident = "severity", assays = "RNA")$RNA
+library(factoextra)
+res.pca <- prcomp(t(avg), scale = F)
+##
+severity=c("Severe", "Moderate","Severe", "Healthy","Healthy","Severe","Severe","Severe","Moderate","Moderate","Moderate","Healthy","Severe","Severe")
+cols= getPalette(length(unique(edta$severity)))
+
+g=fviz(res.pca, element="ind", geom="point",  pointsize = 5,
+              habillage=severity, palette = cols
+          , invisible="quali") 
+ggsave(filename=paste0("EDTA_PCA_INDIVIDUALS_PSEUDBULK",Sys.Date(),".png"), plot=g, device="png",
+       path= "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/INTEGRATED_ALL/FIGURE_1/", height=5, width=5, units="in", dpi=500)
+```
+
+antiviral signature
+```{r}
+library(readr)
+Fn_sig_v2 <- read_csv("/Users/equipe.soumelis/Desktop/ressources_ImportantFiles/Dendrisepsis x functional modules - memo/Fn_sig_v2.csv")
+
+DotPlot(edta, features=na.omit(Fn_sig_v2$Antiviral), dot.scale = 8, group.by = "severity") + scale_color_viridis(option="D")+ RotatedAxis() 
+```
+
+
+Patient level:
+
+```{r}
+edta$category= paste0(edta$orig.ident,"_", edta$severity)
+
+
+pathways=c("IL6_JAK_STAT3_SIGNALING1","TGF_BETA_SIGNALING1","INFLAMMATORY_RESPONSE1","P53_PATHWAY1","TNFA_SIGNALING_VIA_NFKB1","KRAS_SIGNALING_UP1" )
+p=DotPlot(edta, features = pathways, dot.scale = 8, group.by = "category") + scale_color_viridis(option="D") +
+  theme (axis.text.x = element_text(size=14, face="bold", colour = "black",angle = 90),axis.text.y = element_text(size=14, face="bold", colour = "black",angle = 0)) 
+##
+ggsave(filename=paste0("PATHWAYS_Severity_DOTPLOT_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=12, width=8, units="in", dpi=500)
+
+```
+
+```{r}
+p <- VlnPlot(edta, features = c("HLA-DRB1", "HLA-DPB1", "HLA-DQA2", "B2M"), group.by = "celltype",pt.size = 0, combine = F)
+for(i in 1:length(p)) {
+  p[[i]] <- p[[i]] + NoLegend() + theme (axis.text.x = element_text(size=8, face="bold", colour = "black",angle = 90, hjust = 0.1),axis.text.y = element_text(size=8, face="bold", colour = "black",angle = 0))}
+  stat_summary(fun= median, geom='point', size = 5, colour = "black", shape = 95) 
+  # stat_compare_means(label = "p.signif", method = "wilcox.test", ref.group = "Healthy", aes(label=..p.adj..))}
+g=cowplot::plot_grid(plotlist = p, ncol = 4)
+```
+
+```{r}
+ggsave(filename=paste0("HLA_SVG_",Sys.Date(),".svg"), plot=g, device="svg",
+       path= "C:/Users/MakotoTeam/Documents/", height=6, width=14, units="in", dpi=500)
+```
+
+SAVE ALL OBJECTS 28/12/2020
+```{r}
+path="C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/COVID_EDTA_RPMI_RDS/SAVINGS_28122020/"
+saveRDS(edta, paste0(path, "EDTA_", Sys.Date(), ".Rds"))
+saveRDS(pDC, paste0(path, "EDTA_pDC", Sys.Date(), ".Rds"))
+saveRDS(classical, paste0(path, "EDTA_CD14MONOCYTES", Sys.Date(), ".Rds"))
+saveRDS(cdc2, paste0(path, "EDTA_CLEC9ADC", Sys.Date(), ".Rds"))
+saveRDS(nonclas, paste0(path, "EDTA_CD16MONOCYTES", Sys.Date(), ".Rds"))
+saveRDS(cDC, paste0(path, "EDTA_CD1CDC", Sys.Date(), ".Rds"))
+saveRDS(rpmi, paste0(path, "RPMI_", Sys.Date(), ".Rds"))
+```
+read the datasets:
+```{r}
+edta= readRDS("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/COVID_EDTA_RPMI_RDS/SAVINGS_28122020/EDTA_2020-12-28.Rds")
+pDC=readRDS("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/COVID_EDTA_RPMI_RDS/SAVINGS_28122020/EDTA_pDC2020-12-28.Rds")
+classical= readRDS("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/COVID_EDTA_RPMI_RDS/SAVINGS_28122020/EDTA_CD14MONOCYTES2020-12-28.Rds")
+cdc2= readRDS("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/COVID_EDTA_RPMI_RDS/SAVINGS_28122020/EDTA_CLEC9ADC2020-12-28.Rds")
+cDC= readRDS("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/COVID_EDTA_RPMI_RDS/SAVINGS_28122020/EDTA_CD1CDC2020-12-28.Rds")
+
+rpmi=readRDS("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/COVID_EDTA_RPMI_RDS/SAVINGS_28122020/RPMI_2020-12-28.Rds")
+```
+
+```{r}
+ Idents(edta)="orig.ident"
+ edta=SubsetData(edta, ident.remove =c("01_040_J2","CTRL_06_01_EDTA" ))
+```
+
+```{r}
+ Idents(rpmi)="orig.ident"
+rpmi=SubsetData(rpmi, ident.remove =c("01_37_J26","03_01_J21" ))
+ table(rpmi$celltype)
+```
+
+```{r}
+Idents(rpmi)="celltype"
+pdc= subset(rpmi, idents = "pDC")
+
+functions=c("GZMB", "TNFSF10", "ITGB2", "MX2", "ISG20", "IRF7", "IFIT2", "BST2", "ISG15", "MX1", "OAS1", "IFITM2", "TRIM5", "ADAR", "CGAS", "DHX36", "DHX9", "PYCARD","TMEM173" ,"TLR7", "TLR9", "CCL20", "CCL5", "CCL3", "IL18",  "TNFSF13B")
+DefaultAssay(pdc)="RNA"
+library(viridis)
+p=DotPlot(pdc, features=functions, dot.scale = 8, group.by = "severity", assay = "RNA") +  scale_color_viridis(option="D") + 
+  theme (axis.text.x = element_text(size=10, face="bold", colour = "black",angle = 90),axis.text.y = element_text(size=12, face="bold", colour = "black",angle = 0),legend.text = element_text(face = "bold", size = 10)) + geom_vline(xintercept = c(3.5,14.5,21.5), linetype="dotted", color = "black", size=1.5) 
+
+path="C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/COVID_RPMI_12122020/"
+
+ggsave(filename=paste0("FUNCTIONS_PDC_INVERTED_RPMI",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=5, width=9, units="in", dpi=500)
+
+```
+
+Savings of the datasets after removal of the correct patients:
+```{r}
+path="C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/COVID_EDTA_RPMI_RDS/SAVINGS_30122020/"
+saveRDS(edta, paste0(path, "EDTA_", Sys.Date(), ".Rds"))
+saveRDS(pDC, paste0(path, "EDTA_pDC", Sys.Date(), ".Rds"))
+saveRDS(classical, paste0(path, "EDTA_CD14MONOCYTES", Sys.Date(), ".Rds"))
+saveRDS(cdc2, paste0(path, "EDTA_CLEC9ADC", Sys.Date(), ".Rds"))
+#saveRDS(nonclas, paste0(path, "EDTA_CD16MONOCYTES", Sys.Date(), ".Rds"))
+saveRDS(cDC, paste0(path, "EDTA_CD1CDC", Sys.Date(), ".Rds"))
+saveRDS(rpmi, paste0(path, "RPMI_", Sys.Date(), ".Rds"))
+```
+
+FINAL SAVING OF RDS:
+```{r}
+path="C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/Final_Rds_Savings_08012021/"
+
+
+saveRDS(edta, paste0(path, "EDTA_", Sys.Date(), ".Rds"))
+saveRDS(pDC, paste0(path, "EDTA_pDC", Sys.Date(), ".Rds"))
+saveRDS(classical, paste0(path, "EDTA_CD14MONOCYTES", Sys.Date(), ".Rds"))
+saveRDS(cdc2, paste0(path, "EDTA_CLEC9ADC", Sys.Date(), ".Rds"))
+#saveRDS(nonclas, paste0(path, "EDTA_CD16MONOCYTES", Sys.Date(), ".Rds"))
+saveRDS(cDC, paste0(path, "EDTA_CD1CDC", Sys.Date(), ".Rds"))
+saveRDS(rpmi, paste0(path, "RPMI_", Sys.Date(), ".Rds"))
+saveRDS(CC.data, paste0(path, "EDTA_CD1C_CCData_ICELLNET_", Sys.Date(), ".Rds"))
+saveRDS(PC.data, paste0(path, "EDTA_CD1C_PCData_ICELLNET_", Sys.Date(), ".Rds"))
+```
+
+```{r}
+library(Seurat)
+path="C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/Final_Rds_Savings_08012021/"
+edta= readRDS("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/Final_Rds_Savings_08012021/EDTA_2021-01-08.Rds")
+
+
+pDC= readRDS("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/Final_Rds_Savings_08012021/EDTA_pDC2021-01-08.Rds")
+classical= readRDS("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/Final_Rds_Savings_08012021/EDTA_CD14MONOCYTES2021-01-08.Rds")
+cdc2= readRDS("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/Final_Rds_Savings_08012021/EDTA_CLEC9ADC2021-01-08.Rds")
+cDC=readRDS("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/Final_Rds_Savings_08012021/EDTA_CD1CDC2021-01-08.Rds")
+nonclas= readRDS("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/INTEGRATED_ALL/EDTA_NON_CLASSICAL_MONOCYTES_FINAL.Rds")
+asdc= readRDS("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/Final_Rds_Savings_08012021/asDC_2021-01-15.Rds")
+```
+
+isolate the matrices
+```{r}
+edta= readRDS("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/Final_Rds_Savings_08012021/EDTA_2021-01-08.Rds")
+pDC= readRDS("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/Final_Rds_Savings_08012021/EDTA_pDC2021-01-08.Rds")
+classical= readRDS("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/Final_Rds_Savings_08012021/EDTA_CD14MONOCYTES2021-01-08.Rds")
+cdc2= readRDS("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/Final_Rds_Savings_08012021/EDTA_CLEC9ADC2021-01-08.Rds")
+cDC=readRDS("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/Final_Rds_Savings_08012021/EDTA_CD1CDC2021-01-08.Rds")
+nonclas= readRDS("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/INTEGRATED_ALL/EDTA_NON_CLASSICAL_MONOCYTES_FINAL.Rds")
+asdc= readRDS("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/Final_Rds_Savings_08012021/asDC_2021-01-15.Rds")
+rpmi= readRDS("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/Final_Rds_Savings_08012021/RPMI_2021-01-08.Rds")
+```
+
+SAVE THE NORMALIZD DATA:
+library(data.table)
+
+fwrite(x = as.data.frame(as.matrix(edta@scale.data)),row.names = TRUE, file = "EDTA_Scaled.csv", )
+```{r}
+library(tidyverse)
+library(openxlsx)
+
+path="C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/Matrices_NCB/"
+setwd("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/Matrices_NCB/")
+
+work_book <- createWorkbook()
+
+
+addWorksheet(work_book, sheetName="DiscoverySet_allAPC")
+
+
+addWorksheet(work_book, sheetName="DiscoverySet_pDC")
+
+addWorksheet(work_book, sheetName="DiscoverySet_CD14Mono")
+addWorksheet(work_book, sheetName="DiscoverySet_CD16Mon")
+addWorksheet(work_book, sheetName="DiscoverySet_ASDC")
+addWorksheet(work_book, sheetName="DiscoverySet_CLEC9A_DC")
+addWorksheet(work_book, sheetName="DiscoverySet_CD1C_DC")
+addWorksheet(work_book, sheetName="ValidationSet_allAPC")
+
+#addWorksheet(work_book, sheetName="DiscoverySet_allAPC subsets_MetaData")
+#addWorksheet(work_book, sheetName="ValidationSet_allAPC subsets_MetaData")
+
+writeData(work_book, "DiscoverySet_allAPC",as.data.frame(as.matrix(edta@assays$RNA@counts)) )
+writeData(work_book, "DiscoverySet_pDC",as.data.frame(as.matrix(pDC@assays$RNA@counts)) )
+writeData(work_book, "DiscoverySet_CD14Mono",as.data.frame(as.matrix(classical@assays$RNA@counts)) )
+writeData(work_book, "DiscoverySet_CD16Mon",as.data.frame(as.matrix(nonclas@assays$RNA@counts)) )
+
+writeData(work_book, "DiscoverySet_ASDC",as.data.frame(as.matrix(asdc@assays$RNA@counts)) )
+writeData(work_book, "DiscoverySet_CLEC9A_DC",as.data.frame(as.matrix(cdc2@assays$RNA@counts)) )
+writeData(work_book, "DiscoverySet_CD1C_DC",as.data.frame(as.matrix(cDC@assays$RNA@counts)) )
+#writeData(work_book, "ValidationSet_allAPC",as.data.frame(as.matrix(rpmi@assays$RNA@counts)) )
+
+##
+writeData(work_book, "DiscoverySet_allAPC subsets_MetaData",as.data.frame(as.matrix(edta@assays$RNA@counts)) )
+writeData(work_book, "ValidationSet_allAPC subsets_MetaData",as.data.frame(as.matrix(edta@assays$RNA@counts)) )
+
+
+
+
+saveWorkbook(work_book,
+             file= "multiple_dataframes_in_single_excel_file.xlsx",
+             overwrite = TRUE)
+```
+
+
