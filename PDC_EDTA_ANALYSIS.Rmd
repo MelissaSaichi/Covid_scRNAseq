@@ -1,0 +1,496 @@
+---
+title: "pDC_EDTA_ANALYSIS"
+author: "MELISSA"
+date: "05/12/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+path="C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/COVID_EDTA_12122020/FIGURE_4/"
+
+library(dplyr)
+Idents(edta)="celltype"
+aspDC= subset(edta, idents="pDC/asDC") # 4450
+##
+pDC= subset(aspDC,  asDC1 < 0)
+DefaultAssay(pDC)="SCT"
+pDC=pDC %>% FindVariableFeatures()%>% RunPCA( ) %>%  FindNeighbors(., dims = 1:30)  %>% FindClusters(., resolution = 0.8)  %>% RunUMAP(., dims = 1:30)
+```
+
+```{r}
+getPalette = colorRampPalette(brewer.pal(8, "Dark2"))
+p2=DimPlot(pDC, group.by = "orig.ident", cols= getPalette(length(unique(pDC$orig.ident))),label.size = 8, pt.size = 1) +theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=12, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+
+ggsave(filename=paste0("SUBCLUSTERED_EDTA_SCT_merged_pDC_UMAP_Patient_",Sys.Date(),".png"), plot=p2, device="png",
+       path= path, height=5, width=5, units="in", dpi=500)
+
+#####
+getPalette = colorRampPalette(brewer.pal(6, "Dark2"))
+p3=DimPlot(pDC, group.by = "severity", cols= getPalette(length(unique(pDC$severity))), label.size = 8, pt.size = 1, label.color = "black", label.box = T) +theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold", size = 12) )
+
+ggsave(filename=paste0("SUBCLUSTERED_EDTA_SCT_pDC_UMAP_Severity_2_",Sys.Date(),".png"), plot=p3, device="png",
+       path= path, height=5, width=5, units="in", dpi=500)
+```
+
+
+```{r}
+Idents(pDC)= "orig.ident"
+pDC=SubsetData(pDC, ident.remove = c("01_040_J2" ))
+
+DefaultAssay(pDC)= "RNA"
+Idents(pDC)="severity"
+levels(pDC) <- c("Healthy", "Moderate", "Severe")
+ cols= getPalette(length(unique(pDC$severity)))
+mpDC=FindAllMarkers(pDC, only.pos = TRUE, logfc.threshold = 0.1) %>% filter(.,p_val_adj<0.05 ) %>% .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),] %>% .[-which(rownames(.) %in% grep("^XIS", rownames(.), value = T)),]
+
+top10 <-mpDC %>% group_by(cluster) %>% top_n(n = 10, wt = avg_logFC)
+
+ph=DoHeatmap(pDC, features = top10$gene, group.colors=cols ,hjust=F, angle = 0, size = 4) + scale_fill_gradientn(colors = rev(RColorBrewer::brewer.pal(n = 10, name = "RdBu")))   +
+  theme (axis.text.y = element_text(size=12, face="bold", colour = "black",angle = 0)) + NoLegend()
+
+ggsave(filename=paste0("pDC_HEATMAP_Severity_TOP10DEG_",Sys.Date(),".png"), plot=ph, device="png",
+       path= path, height=8, width=7, units="in", dpi=500)
+```
+
+IL1B/ATF3/EGR3/PMAIP1/MCL1/BTG2/CLU/JUN : APOPTOSIS
+PATHWAY ENRICHMENT ANALYSIS ON pDC:
+
+redo it here:
+read the pDC file:
+```{r}
+pDC= readRDS("/Volumes/Melissa/COVID_18122020/COVID_EDTA_12122020/FIGURE_4/pDC.Rds")
+fem= WhichCells(pDC, expression= XIST > 0.2)
+pDC$gender= ifelse(colnames(pDC) %in% fem, "Female", "Male")
+#path="/Volumes/Melissa/COVID_18122020/COVID_EDTA_12122020/FIGURE_4/"
+```
+
+```{r}
+library(pathfindR)
+library(tidyverse)
+library(clusterProfiler)
+library(msigdbr)
+Idents(pDC)="severity"
+####◘
+ms2=ms
+ms= FindMarkers(pDC, ident.1 = "Severe", ident.2 = "Moderate", only.pos = T,logfc.threshold = 0.25, test.use = "LR", latent.vars = "gender") 
+ms$gene=rownames(ms)
+ms= ms %>% filter(.,p_val_adj<0.05 ) 
+rownames(ms)= ms$gene
+ms = ms%>% .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),]
+write.csv(ms,paste0(path, "UP_pDC_SeverevsModerate_LOG0.25.csv"))
+
+pathgenes_ms= ms[,c(2,5)] %>% rownames_to_column(., var="Gene_Symbol")
+
+pathoutput_sm= run_pathfindR(pathgenes_ms, gaThread= 6, gene_sets = c( "GO-All"), visualize_enriched_terms=F,  silent_option = TRUE, output_dir = "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/INTEGRATED_ALL/pathfindR_Results_pDC_UP_SeverevsModerate")
+
+write.csv(pathoutput_sm, "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/INTEGRATED_ALL/UP_pDC_SEVEREvsMODERATE.csv")
+###
+pathoutput_sm=pathoutput_sm[order(pathoutput_sm$Fold_Enrichment, decreasing = T),]
+pathoutput_sm=pathoutput_sm[1:30,]
+
+p=pathfindR::enrichment_chart(pathoutput_sm , top_terms = 15, num_bubbles=5) +theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )+ scale_color_viridis(option="D") 
+p= deg1(ms, "High_Severe vs Moderate pDC", "#E6AB02")
+ ggsave(filename=paste0("ENRICHMENT_UP_pDC_SEVERE_vsMODERATE_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=5, width=10, units="in", dpi=500)
+####################
+p= deg1(ms, "High_Severe vs Moderate pDC", "#E6AB02")
+ ggsave(filename=paste0("ENRICHMENT_UP_pDC_SEVERE_vsMODERATE_",Sys.Date(),".png"), plot=p, device="png",path= path, height=5, width=12, units="in", dpi=500)
+```
+
+```{r}
+sm= FindMarkers(pDC, ident.2 = "Severe", ident.1 = "Moderate", only.pos = T,logfc.threshold = 0.25,test.use = "LR", latent.vars = "gender") 
+sm$gene=rownames(sm)
+sm= sm %>% filter(.,p_val_adj<0.05 ) 
+rownames(sm)=sm$gene
+sm= sm %>% .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),]
+write.csv(sm,paste0(path, "UP_pDC_ModeratevsSevere_LOG0.25.csv"))
+
+p= deg1(sm, "High_Moderate vs Severe pDC", "#AD4C9E")
+ggsave(filename=paste0("pDC_UP_MODERATEvsSEVERE_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=6, width=12, units="in", dpi=500)
+
+```
+
+```{r}
+hs= FindMarkers(pDC, ident.1 = c("Severe" ), ident.2 = "Healthy", only.pos = T, logfc.threshold = 0.25,test.use = "LR", latent.vars = "gender") 
+ hs$gene = rownames(hs)
+hs=hs%>% filter(.,p_val_adj<0.05 )
+rownames(hs)= hs$gene
+hs= hs %>% .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),] 
+
+p=deg1(hs, "High_pDC_SEVEREvsHD", "grey")
+##
+ggsave(filename=paste0("pDC_UP_SEVERE_vsHD_",Sys.Date(),".png"), plot=p, device="png",path= path, height=6, width=14, units="in", dpi=500)
+#######
+####################
+pathgenes_hs= hs[,c(2,5)] %>% rownames_to_column(., var="Gene_Symbol")
+pathoutput_hs= run_pathfindR(pathgenes_hs, gaThread= 10, gene_sets = c( "GO-All",  "Reactome"), visualize_enriched_terms=F,  silent_option = TRUE, output_dir = "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/INTEGRATED_ALL/pathfindR_Results_pDC_UP_SeverevsModerate")
+##
+pathoutput_hs=pathoutput_hs[order(pathoutput_hs$Fold_Enrichment, decreasing = T),]
+pathoutput_hs=pathoutput_hs[1:30,]
+
+p=pathfindR::enrichment_chart(pathoutput_hs , top_terms = 15, num_bubbles=5) +theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )+ scale_color_viridis(option="D") 
+##
+ggsave(filename=paste0("pDC_UP_COVIDvsHD_pDC_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=5, width=10, units="in", dpi=500)
+```
+
+CHECK SOME PATHWAYS ON IN SEVERE VS MODERATE
+Pathways associated pDC:
+
+```{r}
+library(RColorBrewer)
+getPalette = colorRampPalette(brewer.pal(6, "Dark2"))
+cols= getPalette(length(unique(pDC$severity)))
+```
+
+```{r}
+res.hp <- enricher(rownames(ms), TERM2GENE=m_t2g)@result %>% filter(.,p.adjust<0.05 )
+res.hp2 <- enricher(rownames(sm), TERM2GENE=m_t2g)@result %>% filter(.,p.adjust<0.05 )
+res.hp3 <- enricher(rownames(hs), TERM2GENE=m_t2g)@result %>% filter(.,p.adjust<0.05 )
+###
+write.csv(res.hp, paste0(path, "pDC_Pathways_SeverevsModerate.csv"))
+write.csv(res.hp2, paste0(path, "pDC_Pathways_ModeratevsSevere.csv"))
+write.csv(res.hp3, paste0(path, "pDC_Pathways_SeverevsHealthy.csv"))
+######################
+### Severe vs Moderate:
+tnfa=strsplit(res.hp[which(res.hp$ID=="HALLMARK_TNFA_SIGNALING_VIA_NFKB"),8], split = "/")
+il2=strsplit(res.hp[which(res.hp$ID=="HALLMARK_IL2_STAT5_SIGNALING"),8], split = "/")
+hypoxia= strsplit(res.hp[which(res.hp$ID== "HALLMARK_HYPOXIA"),8], split = "/")
+####
+pDC=AddModuleScore(pDC, features = tnfa, name="TNFA_SIGNALING_VIA_NFKB")
+pDC=AddModuleScore(pDC, features = il2, name="IL2_STAT5_SIGNALING")
+pDC=AddModuleScore(pDC, features = hypoxia, name="HYPOXIA")
+######################
+### Moderate vs Severe
+ifngresp=strsplit(res.hp2[which(res.hp2$ID== "HALLMARK_INTERFERON_GAMMA_RESPONSE"),8], split = "/")
+ifnaresp=strsplit(res.hp2[which(res.hp2$ID== "HALLMARK_INTERFERON_ALPHA_RESPONSE"),8], split = "/")
+myc=strsplit(res.hp2[which(res.hp2$ID== "HALLMARK_MYC_TARGETS_V1"),8], split = "/")
+#####
+pDC=AddModuleScore(pDC, features = ifngresp, name="IFNG_RESPONSE")
+pDC=AddModuleScore(pDC, features = ifnaresp, name="IFNA_RESPONSE")
+pDC=AddModuleScore(pDC, features = myc, name="MYC_TARGETS")
+#######################
+###Severe vs Healthy:
+il6=strsplit(res.hp3[which(res.hp3$ID== "HALLMARK_IL6_JAK_STAT3_SIGNALING"),8], split = "/")
+p53= strsplit(res.hp3[which(res.hp3$ID=="HALLMARK_P53_PATHWAY"),8], split = "/")
+mtorc=strsplit(res.hp3[which(res.hp3$ID== "HALLMARK_MTORC1_SIGNALING"),8], split = "/")
+####
+pDC=AddModuleScore(pDC, features = il6, name="IL6_JAK_STAT3_SIGNALING")
+pDC=AddModuleScore(pDC, features = p53, name="P53_PATHWAY")
+pDC=AddModuleScore(pDC, features = mtorc, name="MTORC1_SIGNALING")
+
+### "Pro_APOPTOSIS1",
+library(ggpubr)
+levels(pDC)=c("Healthy", "Moderate", "Severe")
+p <-VlnPlot(pDC, c("TNFA_SIGNALING_VIA_NFKB1","HYPOXIA1", "IL2_STAT5_SIGNALING1"), cols =cols, pt.size = 0, combine = F ) #, 
+
+p2 <-VlnPlot(pDC, c("IFNG_RESPONSE1","IFNA_RESPONSE1","MYC_TARGETS1"), cols =cols, pt.size = 0, combine = F )
+
+p3 <-VlnPlot(pDC, c("IL6_JAK_STAT3_SIGNALING1","P53_PATHWAY1","MTORC1_SIGNALING1"), cols =cols, pt.size = 0, combine = F )
+
+
+for(i in 1:length(p)) {
+  p3[[i]] <- p3[[i]] + NoLegend()+
+  stat_summary(fun= median, geom='point', size = 20, colour = "black", shape = 95) +
+   stat_compare_means(label = "p.signif", method = "wilcox.test", ref.group = "Healthy") +
+  theme (axis.text.x = element_text(size=10, face="bold", colour = "black",angle = 0, hjust = 0.1),axis.text.y = element_text(size=12, face="bold", colour = "black",angle = 0),legend.text = element_text(face = "bold", size = 10)) }
+g=cowplot::plot_grid(plotlist = p3, ncol = 3)
+
+ggsave(filename=paste0("ENRICHMENT_UP_pDC_SEVEREvsHEALTHY_",Sys.Date(),".png"), plot=g, device="png",path= path, height=7, width=13, units="in", dpi=500)
+```
+
+
+PLOT EXPRESSION LEVELS OF TLR, IFNAR:
+```{r}
+library(Rmagic)
+seur=magic(pDC)
+pDC=seur
+seur=pDC
+DefaultAssay(pDC)='MAGIC_RNA'
+pDC= ScaleData(pDC)
+```
+
+```{r}
+path="C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/COVID_EDTA_12122020/FIGURE_4/"
+functions=c("GZMB", "TNFSF10", "ITGB2", "MX2", "ISG20", "IRF7", "IFIT2", "BST2", "ISG15", "MX1", "OAS1", "IFITM2", "TRIM5", "ADAR", "CGAS", "DHX36", "DHX9", "PYCARD","TMEM173" ,"TLR7", "TLR9", "CCL20", "CCL5", "CCL3", "IL18",  "TNFSF13B")
+DefaultAssay(pDC)="RNA"
+library(viridis)
+p=DotPlot(pDC, features=functions, dot.scale = 8, group.by = "severity", assay = "RNA") +  scale_color_viridis(option="D") + 
+  theme (axis.text.x = element_text(size=10, face="bold", colour = "black",angle = 90),axis.text.y = element_text(size=12, face="bold", colour = "black",angle = 0),legend.text = element_text(face = "bold", size = 10)) + geom_vline(xintercept = c(3.5,14.5,21.5), linetype="dotted", color = "black", size=1.5) 
+
++coord_flip()
+
+ggsave(filename=paste0("FUNCTIONS_PDC_INVERTED_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=5, width=9, units="in", dpi=500)
+```
+
+
+```{r}
+Idents(pDC)= "severity"
+levels(pDC)=c("Healthy", "Moderate", "Severe")
+DefaultAssay(pDC)='MAGIC_RNA'
+genes= c("TLR9", "TLR7", "DHX36", "ISG20",  "ADAR", "GZMB", "IFNAR1", "BST2", "PYCARD")
+p <-VlnPlot(pDC, genes, cols =cols, pt.size = 0.5, combine = F )
+for(i in 1:length(p)) {
+  p[[i]] <- p[[i]] + NoLegend()+
+  stat_summary(fun= median, geom='point', size = 20, colour = "black", shape = 95) +
+   stat_compare_means(label = "p.signif", method = "wilcox.test", ref.group = "Healthy") +
+  theme (axis.text.x = element_text(size=10, face="bold", colour = "black",angle = 0, hjust = 0.5),axis.text.y = element_text(size=10, face="bold", colour = "black",angle = 0),legend.text = element_text(face = "bold", size = 10)) }
+g=cowplot::plot_grid(plotlist = p , ncol = 3) #list(p[[7]],p[[8]],p[[9]])
+##
+ggsave(filename=paste0("PDC_VLNPLOT_FUNCTION_GENES_MAGIC_CORRECTED_3_",Sys.Date(),".png"), plot=g, device="png", path= path, height=9, width=9, units="in", dpi=500)
+```
+
+```{r}
+saveRDS(pDC, paste0(path, "pDC_IMPUTED_MAGIC.Rds") )
+```
+
+```{r}
+pDC=readRDS("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/COVID_EDTA_12122020/FIGURE_4/pDC_IMPUTED_MAGIC.Rds")
+path="C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/COVID_EDTA_12122020/FIGURE_4/"
+```
+
+Patient LEVEL:
+```{r}
+
+pDC$category= paste0(pDC$orig.ident, "_", pDC$severity)
+Idents(pDC)="category"
+ levels(pDC)= c("CTRL_02021_Healthy", "CTRL_02022_Healthy","01_052_Moderate" ,"05_01_J1_Moderate" , "05_01_J4_Moderate","05_02_Moderate", "01_049_Severe","01_054_J0_Severe","03_001_J1_Severe", "03_01_J5_Severe","P037_J0_Severe"   ,  "P037_J4_Severe"  )
+ 
+getPalette = colorRampPalette(brewer.pal(12, "Paired"))
+cols= getPalette(length(unique(pDC$category)))
+#################################################################
+p= VlnPlot(pDC, features="P53_PATHWAY1",  cols=cols)+
+  theme (axis.text.x = element_text(size=10, face="bold", colour = "black",angle = 90, hjust = 0.1),axis.text.y = element_text(size=12, face="bold", colour = "black",angle = 0),legend.text = element_text(face = "bold", size = 4)) +NoLegend()+
+  stat_summary(fun= median, geom='point', size = 15, colour = "red", shape = 95) 
+
+ggsave(filename=paste0("pDC_P53Pathway_CATEGORY_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=6, width=13, units="in", dpi=500)
+
+##################################################################
+
+p= VlnPlot(pDC, features="IL6_JAK_STAT3_SIGNALING1",  cols=cols)+
+  theme (axis.text.x = element_text(size=10, face="bold", colour = "black",angle = 90, hjust = 0.1),axis.text.y = element_text(size=12, face="bold", colour = "black",angle = 0),legend.text = element_text(face = "bold", size = 4)) +NoLegend()+
+  stat_summary(fun= median, geom='point', size = 15, colour = "red", shape = 95) 
+
+ggsave(filename=paste0("pDC_IL6JAKSTAT_CATEGORY_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=6, width=13, units="in", dpi=500)
+```
+
+
+#######################################################################################
+WORK ON AS-DC:
+```{r}
+
+path="/Volumes/Melissa/Analysis_COVID_COMBINED/ANALYSIS_12122020/FIGURES_ASDC/"
+Idents(edta)="celltype"
+asDC= subset(edta, idents = "asDC")
+DefaultAssay(asDC)="SCT"
+asDC=asDC %>% FindVariableFeatures()%>% RunPCA( ) %>%  FindNeighbors(., dims = 1:30)  %>% FindClusters(., resolution = 0.8)  %>% RunUMAP(., dims = 1:30)
+
+fem= WhichCells(asDC, expression= XIST > 0.1)
+asDC$gender= ifelse(colnames(asDC) %in% fem, "Female", "Male")
+```
+
+
+
+```{r}
+getPalette = colorRampPalette(brewer.pal(8, "Dark2"))
+p2=DimPlot(asDC, group.by = "orig.ident", cols= getPalette(length(unique(asDC$orig.ident))),label.size = 6, pt.size = 1) +theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+
+ggsave(filename=paste0("EDTA_SCT_asDC_UMAP_Patient_",Sys.Date(),".png"), plot=p2, device="png",
+       path= path, height=5, width=5, units="in", dpi=500)
+
+#####
+getPalette = colorRampPalette(brewer.pal(6, "Dark2"))
+p3=DimPlot(asDC, group.by = "severity", cols= getPalette(length(unique(asDC$severity))), label.size = 6, pt.size = 1, label.color = "black", label.box = T) +theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+
+ggsave(filename=paste0("EDTA_SCT_asDC_UMAP_Severity_",Sys.Date(),".png"), plot=p3, device="png",
+       path= path, height=5, width=5, units="in", dpi=500)
+```
+
+
+```{r}
+DefaultAssay(asDC)= "RNA"
+Idents(asDC)="severity"
+levels(asDC) <- c("Healthy", "Moderate", "Severe")
+ cols= getPalette(length(unique(asDC$severity)))
+masDC=FindAllMarkers(asDC, only.pos = TRUE, logfc.threshold = 0.1, test.use = "LR", latent.vars = "gender") %>% filter(.,p_val_adj<0.05 ) %>% .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),]
+
+top10 <-masDC %>% group_by(cluster) %>% top_n(n = 10, wt = avg_logFC)
+
+ash=DoHeatmap(asDC, features = top10$gene, group.colors=cols ,hjust=F, angle = 0, size = 4) + scale_fill_gradientn(colors = rev(RColorBrewer::brewer.pal(n = 10, name = "RdBu")))   +
+  theme (axis.text.y = element_text(size=12, face="bold", colour = "black",angle = 0)) + NoLegend()
+
+ggsave(filename=paste0("asDC_HEATMAP_Severity_TOP10DEG_",Sys.Date(),".png"), plot=ph, device="png",
+       path= path, height=8, width=7, units="in", dpi=500)
+```
+
+IL1B/ATF3/EGR3/PMAIP1/MCL1/BTG2/CLU/JUN : APOPTOSIS
+PATHWAY ENRICHMENT ANALYSIS ON pDC:
+
+```{r}
+library(pathfindR)
+library(tidyverse)
+library(clusterProfiler)
+library(msigdbr)
+Idents(pDC)="severity"
+####◘
+
+ms= FindMarkers(asDC, ident.1 = "Severe", ident.2 = "Moderate", only.pos = F,logfc.threshold = 0.25, test.use = "LR", latent.vars = "gender", min.pct = 0.1) 
+markers=ms
+ms=markers
+ms=ms %>% rownames_to_column(., var = "gene")
+ms=ms[-which(ms$gene%in% grep("^IG", ms$gene, value = T)),]
+ms=ms[-which(ms$gene%in% grep("^HB", ms$gene, value = T)),]
+write.csv(ms,paste0(path, "UP_asDC_SeverevsModerate_LOG0.25_filtered.csv"))
+rownames(ms)=ms$gene
+```
+
+```{r}
+deg1=function(data, X, Y){ #X: output of FindMarkers function, Y: Color of the bars
+hpp=data[which(data$avg_logFC>0),] 
+egmtp <- enricher(rownames(data) , TERM2GENE=m_t2g) ##WORKED ::
+###
+res.hp=egmtp@result
+##
+res.hp=res.hp[which(res.hp$p.adjust< 0.01),]
+res.hp$ID= gsub("HALLMARK_", "", res.hp$ID)
+res.hp=res.hp[,c(1,6)]
+res.hp$state=rep(X,nrow(res.hp))
+res.hp$p.adjust=-log10(res.hp$p.adjust)
+ p= ggplot(res.hp, aes(y = p.adjust, x= ID, fill = state))+
+  geom_bar(stat = "identity", width=0.3)+ scale_fill_manual(values=c(Y))+theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=12, face="bold", colour = "black"),legend.text = element_text(face = "bold") )+ ggtitle(X)+
+ coord_flip()
+ return(p)
+}
+
+ cols= getPalette(length(unique(asDC$severity)))
+p2= deg1(ms, "Up_Severe_asDC", "#E6AB02")
+
+ggsave(filename=paste0("asDC_Pathways_Up_Severe_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=7, width=10, units="in", dpi=500)
+
+```
+
+```{r}
+ms= FindMarkers(asDC, ident.2 = "Severe", ident.1 = "Moderate", only.pos = F,logfc.threshold = 0.25, test.use = "LR", latent.vars = "gender", min.pct = 0.1) 
+markers=ms
+
+ms=ms %>% rownames_to_column(., var = "gene")
+ms=ms[-which(ms$gene%in% grep("^IG", ms$gene, value = T)),]
+ms=ms[-which(ms$gene%in% grep("^HB", ms$gene, value = T)),]
+write.csv(ms,paste0(path, "UP_asDC_ModeratevsSevere_LOG0.25_filtered.csv"))
+rownames(ms)=ms$gene
+
+p= deg1(ms, "Up_moderate_vsSevere_asDC", "#AD4C9E")
+
+ggsave(filename=paste0("asDC_Pathways_Up_Moderate_vsSevere_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=7, width=10, units="in", dpi=500)
+###
+p=VlnPlot(asDC, c("IFI27", "HLA-DQA2", "LGALS2", "AREG", "CXCR4", "SEPT6"),cols = cols)
+
+p=VlnPlot(asDC,  c("AREG", "SEPT7", "CXCR4", "IFI27", "HLA-DQA2", "LGALS2"),cols = cols, combine = F)
+for(i in 1:length(p)) {
+  p[[i]] <- p[[i]] + NoLegend()+
+  stat_summary(fun= median, geom='point', size = 20, colour = "black", shape = 95) +
+   stat_compare_means(label = "p.signif", method = "wilcox.test", ref.group = "Healthy") +
+  theme (axis.text.x = element_text(size=10, face="bold", colour = "black",angle = 0, hjust = 0.1),axis.text.y = element_text(size=12, face="bold", colour = "black",angle = 0),legend.text = element_text(face = "bold", size = 10)) }
+g=cowplot::plot_grid(plotlist = p, ncol = 3)
+ggsave(filename=paste0("asDC_DEG_VLNPLOT_Genes_",Sys.Date(),".png"), plot=g, device="png",
+       path= path, height=7, width=11, units="in", dpi=500)
+```
+
+
+```{r}
+library(viper)
+library(dorothea)
+X=asDC
+dorothea_regulon_human <- get(data("dorothea_hs", package = "dorothea"))
+regulon <- dorothea_regulon_human %>%
+    dplyr::filter(confidence %in% c("A","B"))
+#X:seurat object
+run_dorothea=function(X){ 
+X <- run_viper(X, regulon,
+                  options = list(method = "scale", minsize = 4, 
+                                 eset.filter = FALSE, cores = 1, 
+                                 verbose = FALSE))
+DefaultAssay(object =X) <- "dorothea"
+X <- ScaleData(X)
+#X <- RunPCA(X, features = rownames(X), verbose = FALSE)
+#X <- FindNeighbors(X, dims = 1:20, verbose = FALSE)
+DefaultAssay(X)="dorothea"
+#X <- FindClusters(X, resolution = 1.0, verbose = FALSE)
+#X <- RunUMAP(X, dims = 1:10, umap.method = "uwot")
+#DimPlot(X, group.by = "fraction")
+#run differential expression based on TF activities:
+#run differential activity according to severity:
+Idents(X)="severity"
+tfa <- FindAllMarkers(X, only.pos = TRUE, min.pct = 0.1,logfc.threshold = 0.25, verbose = FALSE)
+tfa=tfa[which(tfa$p_val_adj <0.01),]
+top15 <-tfa %>% group_by(cluster) %>% top_n(n = 15, wt = avg_logFC)
+########Perform TF scoring:
+viper_scores_df <- GetAssayData(X, slot = "scale.data", 
+                                    assay = "dorothea")%>%  data.frame() %>% t()
+CellsClusters <- data.frame(cell = names(Idents(X)), 
+                           # cell_type = as.character(Idents(monocytes)),
+                            origin= as.character(X$"severity"),
+                            stringsAsFactors = FALSE)
+## We create a data frame with the Viper score per cell and its clusters
+viper_scores_clusters <- viper_scores_df  %>%
+  data.frame() %>% 
+  rownames_to_column("cell") %>%
+  gather(tf, activity, -cell) 
+viper_scores_clusters$cell= gsub("[.]", "-", viper_scores_clusters$cell)
+scores_clusters=viper_scores_clusters%>% inner_join(CellsClusters)
+
+## We summarize the Viper scores by cellpopulation  #cell_type,
+summarized_viper_scores <- scores_clusters %>% 
+  group_by(tf,  origin) %>%
+  summarise(avg = mean(activity),
+            std = sd(activity))
+
+## We select the 20 most variable TFs. (20*9 populations = 180)
+highly_variable_tfs <- summarized_viper_scores %>%
+  group_by(tf) %>%
+  mutate(var = var(avg))  %>%
+  ungroup() %>%
+  top_n(150, var) %>%
+  distinct(tf)
+## We prepare the data for the plot
+#summarized_viper_scores_df=summarized_viper_scores_df[c(1,3,4,2),]
+summarized_viper_scores_df <- summarized_viper_scores %>%
+  semi_join(highly_variable_tfs, by = "tf") %>%
+  dplyr::select(-std) %>%   
+  spread(tf, avg) %>%
+  data.frame(row.names = 1, check.names = FALSE, stringsAsFactors = FALSE)
+######
+palette_length = 100
+my_color = colorRampPalette(c("Darkblue", "white","red"))(palette_length)
+my_breaks <- c(seq(min(summarized_viper_scores_df), 0, 
+                   length.out=ceiling(palette_length/2) + 1),
+               seq(max(summarized_viper_scores_df)/palette_length, 
+                   max(summarized_viper_scores_df), 
+                   length.out=floor(palette_length/2)))
+htf= as.data.frame(t(summarized_viper_scores_df))
+viper_hmap <- pheatmap::pheatmap(htf,fontsize=14, 
+                       fontsize_row = 10, 
+                       color=my_color, breaks = my_breaks, 
+                       main = "DoRothEA_DC_X", angle_col = 45,
+                       treeheight_col = 0,  border_color = NA, cluster_cols = F) 
+return( viper_hmap)}
+
+ggsave(filename=paste0("DOROTHEA_ASDC_SEVERITY_",Sys.Date(),".png"), plot=viper_hmap, device="png",
+       path= path, height=10, width=7, units="in", dpi=500)
+```
+
+
+```{r}
+saveRDS(asDC, paste0(path, "asDC_", Sys.Date(), ".Rds"))
+```
+
