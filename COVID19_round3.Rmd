@@ -1,0 +1,678 @@
+---
+title: "COVID19_round3"
+author: "MELISSA"
+date: "28/11/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load libraries:
+```{r}
+library(Seurat)
+library(base)
+```
+
+STEP1: Load the datasets in an automatic way:
+```{r}
+setwd("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Controls_FilteredMatrices/")
+
+tmp1=list.files("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Controls_FilteredMatrices/")
+#easynames=gsub(".txt.gz","",tmp1)
+
+for(i in seq(1, length(tmp1))){
+  assign(paste0("mat_", tmp1[i]),
+         CreateSeuratObject( Read10X(paste0("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Controls_FilteredMatrices/",tmp1[i], "/")), project = tmp1[i],min.cells = 20, min.features = 50))}
+```
+
+```{r}
+nm=grep("mat_",ls(),value = T)
+ for(i in seq(1, length(nm))){
+   x=get(nm[i])
+x[["percent.mito"]] <- PercentageFeatureSet(x, pattern = "^MT-")}
+rm(x)
+rm(easynames)
+rm(i)
+rm(nm)
+rm(tmp1)
+```
+
+```{r}
+mat_CTRL_02022[["percent.mito"]] <- PercentageFeatureSet(mat_CTRL_02022, pattern = "^MT-")
+mat_CTRL_02021[["percent.mito"]] <- PercentageFeatureSet(mat_CTRL_02021, pattern = "^MT-")
+mat_CTRL_02020RPMI[["percent.mito"]] <- PercentageFeatureSet(mat_CTRL_02020RPMI, pattern = "^MT-")
+```
+
+```{r}
+library(ggplot2)
+path="C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/"
+
+p=VlnPlot(mat_CTRL_02020RPMI, c("nCount_RNA", "nFeature_RNA", "percent.mito"), combine = F)
+p=VlnPlot(mat_CTRL_02021, c("nCount_RNA", "nFeature_RNA", "percent.mito"), combine = F)
+p=VlnPlot(mat_CTRL_02022, c("nCount_RNA", "nFeature_RNA", "percent.mito"), combine = F)
+####
+for(i in 1:length(p)) {
+  p[[i]] <- p[[i]] +NoLegend()+
+   theme(axis.text.x = element_text(angle = 360))}
+g1=cowplot::plot_grid(plotlist = p, ncol = 3)  
+##
+ggsave(filename=paste0("VlnPlot_CTRLEDTA2_",Sys.Date(),".png"), plot=g1, device="png",
+       path= path, height=5, width=10, units="in", dpi=500) 
+
+```
+
+```{r}
+seu= CreateSeuratObject(Read10X("/media/msaichi/MyPassport/Sauvegarde09112020/scRNAseq_COVID-19_round3/CellRanger_FilteredMatrices/01-051/filtered_feature_bc_matrix/"),min.cells = 20, min.features = 50)
+seu[["percent.mito"]] <- PercentageFeatureSet(seu, pattern = "^MT-")
+seu=subset(seu, subset  = nFeature_RNA < 6000 & nCount_RNA <40000 & percent.mito <25)
+seu= preprocess(seu)
+
+for (i in seq(1:length(ct))) {
+ seu= AddModuleScore(seu, features = ct[i], name = cn[i])}
+
+for (i in seq(1:length(ct))) {
+ seu= AddModuleScore(seu, features = ct[i], name = cn[i])}
+```
+
+```{r}
+ dim(mat_CTRL_02020RPMI)  15683  9884
+```
+```{r}
+ dim(mat_CTRL_02021)  18643 38152
+```
+```{r} 
+ dim(mat_CTRL_02022)  18312 27052
+```
+```{r}
+mat_CTRL_02020RPMI=subset(mat_CTRL_02020RPMI, subset  = nFeature_RNA < 6000 & nCount_RNA <40000 & percent.mito <25)
+mat_CTRL_02021=subset(mat_CTRL_02021, subset  = nFeature_RNA < 6000 & nCount_RNA <40000 & percent.mito <25)
+
+mat_CTRL_02022=subset(mat_CTRL_02022, subset  = nFeature_RNA < 6000 & nCount_RNA <40000 & percent.mito <25)
+```
+
+
+```{r}
+preprocess= function(x) {
+    x <- NormalizeData(x)
+    x <- FindVariableFeatures(x, selection.method = "vst", nfeatures = 3000)
+    x= ScaleData(x)
+    x= RunPCA(x, features = VariableFeatures(object = x))
+     x <- FindNeighbors(x, dims = 1:30)
+    x <- FindClusters(x, resolution = 0.8)
+   x<- RunUMAP(x, dims = 1:30)
+}
+
+mat_CTRL_02020RPMI= preprocess(mat_CTRL_02020RPMI)
+mat_CTRL_02021= preprocess(mat_CTRL_02021)
+mat_CTRL_02022= preprocess(mat_CTRL_02022)
+```
+
+```{r}
+NK=list(c("NCAM1", "FCGR3A", "GNLY", "XCL1", "XCL2", "NCR1", "NKG7")) 
+B=list(c("CD19", "MS4A1", "CD79A", "CD79B"))
+plasmaCells=list(c("IGHG2", "IGHG1", "IGLC2", "IGHA1", "IGHA2", "IGHA3", "JCHAIN", "IGHM", "XBP1", "MZB1", "CD38", "IGLL5")) 
+Tcells=list(c("CD3D", "CD3E", "CD3G"))
+Platelet=list(c("PPBP"))
+#######•
+pDC=list(c("TCF4", "CLEC4C", "IRF7", "IRF8", "LILRA4", "IL3RA", "TLR9", "SPIB"))
+cDC=list(c("ANPEP",  "CD1C", "ITGAX", "CST3", "FCER1A"))
+monocytes=list(c("CD14", "FCGR1A"," S100A12", "FCGR3A", "MS4A7", "LYZ", "CXCR3"))
+asDC=list(c("AXL", "SIGLEC6","CD22"))
+  ct= c( pDC, cDC, monocytes, asDC)
+cn= c( "pDC", "cDC", "monocytes", "asDC")
+
+for (i in seq(1:length(ct))) {
+ mat_CTRL_02020RPMI= AddModuleScore(mat_CTRL_02020RPMI, features = ct[i], name = cn[i])
+ mat_CTRL_02021= AddModuleScore(mat_CTRL_02021, features = ct[i], name = cn[i])
+mat_CTRL_02022= AddModuleScore(mat_CTRL_02022, features = ct[i], name = cn[i])}
+######
+c1=mat_CTRL_02020RPMI
+c2=mat_CTRL_02021
+c3=mat_CTRL_02022
+c4=mat_CTRL_02020RPMI
+```
+
+```{r}
+ct= c( NK, B, plasmaCells,Tcells, Platelet )
+cn= c(  "NK", "B", "plasmaCells","Tcells", "Platelet")
+for (i in seq(1:length(ct))) {
+ c1= AddModuleScore(c1, features = ct[i], name = cn[i])
+  c2= AddModuleScore(c2, features = ct[i], name = cn[i])
+  c3= AddModuleScore(c3, features = ct[i], name = cn[i])
+   c4= AddModuleScore(c4, features = ct[i], name = cn[i])}
+
+keepAPC=function(x){
+  x=subset(x, pDC1>0.2 | monocytes1>0.2 | cDC1>0.2 | asDC1>0.2) %>% subset(., NK1 <0 & B1 <0 & plasmaCells1 < 0 & Tcells1 < 0 )
+  return(x)}
+c1= keepAPC(c1) %>%  DietSeurat() %>% preprocess()
+c2=keepAPC(c2) %>%DietSeurat(c2) %>% preprocess()
+c3=keepAPC(c3) %>%DietSeurat(c3) %>% preprocess()
+
+```
+save the controls:
+```{r}
+saveRDS(c1, "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/CTRL_02020RPMI_APC.Rds")
+saveRDS(c2, "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/CTRL_02021_APC.Rds")
+saveRDS(c3, "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/CTRL_02022_APC.Rds")
+##
+c1=readRDS("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/CTRL_APC_ROUND3/CTRL_02020RPMI_APC.Rds")
+c2= readRDS("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/CTRL_APC_ROUND3/CTRL_02021_APC.Rds")
+c3= readRDS("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/CTRL_APC_ROUND3/CTRL_02022_APC.Rds")
+```
+
+
+#####################
+LOAD THE PATIENTS:
+
+```{r}
+tmp1=list.files("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Patients_FilteredMatrices/")
+#easynames=gsub(".txt.gz","",tmp1)
+
+for(i in seq(1, length(tmp1))){
+  assign(paste0("P_", tmp1[i]),
+         CreateSeuratObject( Read10X(paste0("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Patients_FilteredMatrices/",tmp1[i], "/")), project = tmp1[i],min.cells = 20, min.features = 50))}
+```
+
+Add the mito genes ratio:
+```{r}
+nm=grep("P_",ls(),value = T)
+P_01_047[["percent.mito"]] <- PercentageFeatureSet(P_01_047, pattern = "^MT-")
+P_01_048_J0[["percent.mito"]] <- PercentageFeatureSet(P_01_048_J0, pattern = "^MT-")
+P_01_048_J5[["percent.mito"]] <- PercentageFeatureSet(P_01_048_J5, pattern = "^MT-")
+P_01_049[["percent.mito"]] <- PercentageFeatureSet(P_01_049, pattern = "^MT-")
+
+P_01_050[["percent.mito"]] <- PercentageFeatureSet(P_01_050, pattern = "^MT-")
+P_01_051[["percent.mito"]] <- PercentageFeatureSet(P_01_051, pattern = "^MT-")
+P_01_051_J10[["percent.mito"]] <- PercentageFeatureSet(P_01_051_J10, pattern = "^MT-")
+P_01_052[["percent.mito"]] <- PercentageFeatureSet(P_01_052, pattern = "^MT-")
+P_01_053[["percent.mito"]] <- PercentageFeatureSet(P_01_053, pattern = "^MT-")
+P_01_054_J0[["percent.mito"]] <- PercentageFeatureSet(P_01_054_J0, pattern = "^MT-")
+```
+
+```{r}
+library(ggplot2)
+path="C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/"
+
+p=VlnPlot(P_01_047, c("nCount_RNA", "nFeature_RNA", "percent.mito"), combine = F)
+
+QC=function(x){
+  x=subset(x, subset  = nFeature_RNA < 6000 & nCount_RNA <40000 & percent.mito <25)
+  return(x)}
+P_01_047=QC(P_01_047)
+P_01_048_J0=QC(P_01_048_J0)
+P_01_048_J5=QC(P_01_048_J5)
+P_01_049=QC(P_01_049)
+P_01_050=QC(P_01_050)
+P_01_051=QC(P_01_051)
+P_01_051_J10= QC(P_01_051_J10)
+P_01_052= QC(P_01_052)
+P_01_053=QC(P_01_053)
+P_01_054_J0= QC(P_01_054_J0)
+####
+  ctp= c( pDC, cDC, monocytes, asDC)
+cnp= c( "pDC", "cDC", "monocytes", "asDC")
+
+for (i in seq(1:length(ctp))) {
+P_01_047= AddModuleScore(P_01_047, features = ctp[i], name = cnp[i])
+P_01_048_J0= AddModuleScore(P_01_048_J0, features = ctp[i], name = cnp[i])
+P_01_048_J5= AddModuleScore(P_01_048_J5, features = ctp[i], name = cnp[i])
+P_01_049 = AddModuleScore(P_01_049, features = ctp[i], name = cnp[i])
+P_01_050 = AddModuleScore(P_01_050, features = ctp[i], name = cnp[i])
+P_01_051 = AddModuleScore(P_01_051, features = ctp[i], name = cnp[i])
+P_01_051_J10 = AddModuleScore(P_01_051_J10, features = ctp[i], name = cnp[i])
+P_01_052 = AddModuleScore(P_01_052, features = ctp[i], name = cnp[i])
+P_01_053 = AddModuleScore(P_01_053, features = ctp[i], name = cnp[i])
+P_01_054_J0 = AddModuleScore(P_01_054_J0, features = ctp[i], name = cnp[i])
+}
+##
+
+####
+
+ct= c( NK, B, plasmaCells,Tcells, Platelet )
+cn= c(  "NK", "B", "plasmaCells","Tcells", "Platelet")
+for (i in seq(1:length(ct))) {
+P_01_047= AddModuleScore(P_01_047, features = ct[i], name = cn[i])
+P_01_048_J0= AddModuleScore(P_01_048_J0, features = ct[i], name = cn[i])
+P_01_048_J5= AddModuleScore(P_01_048_J5, features = ct[i], name = cn[i])
+P_01_049 = AddModuleScore(P_01_049, features = ct[i], name = cn[i])
+P_01_050 = AddModuleScore(P_01_050, features = ct[i], name = cn[i])
+P_01_051 = AddModuleScore(P_01_051, features = ct[i], name = cn[i])
+ P_01_051_J10 = AddModuleScore(P_01_051_J10, features = ct[i], name = cn[i])
+P_01_052 = AddModuleScore(P_01_052, features = ct[i], name = cn[i])
+P_01_053 = AddModuleScore(P_01_053, features = ct[i], name = cn[i])
+P_01_054_J0 = AddModuleScore(P_01_054_J0, features = ct[i], name = cn[i])
+}
+
+
+#################################
+keepAPC=function(x){
+  x=subset(x, pDC1>0.2 | monocytes1>0.2 | cDC1>0.2 | asDC1>0.2) %>% subset(., NK1 <0 & B1 <0 & plasmaCells1 < 0 & Tcells1 < 0 )
+  return(x)}
+
+P_01_047= keepAPC(P_01_047) %>%  DietSeurat() %>% NormalizeData()
+P_01_048_J0= keepAPC(P_01_048_J0) %>%  DietSeurat(.) %>% NormalizeData()
+P_01_048_J5= keepAPC(P_01_048_J5) %>%  DietSeurat() %>% NormalizeData()
+P_01_049= keepAPC(P_01_049) %>%  DietSeurat() %>% NormalizeData()
+P_01_050= keepAPC(P_01_050) %>%  DietSeurat() %>% NormalizeData()
+P_01_051= keepAPC(P_01_051) %>%  DietSeurat() %>% NormalizeData()
+P_01_051_J10= keepAPC(P_01_051_J10) %>%  DietSeurat() %>% NormalizeData()
+P_01_052= keepAPC(P_01_052) %>%  DietSeurat() %>% NormalizeData()
+P_01_053= keepAPC(P_01_053) %>%  DietSeurat() %>% NormalizeData()
+P_01_054_J0= keepAPC(P_01_054_J0) %>%  DietSeurat() %>% NormalizeData()
+
+```
+
+```{r}
+saveRDS(P_01_047, "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/P_01_047_APC.Rds")
+saveRDS(P_01_048_J0, "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/P_01_048_J0_APC.Rds")
+saveRDS(P_01_048_J5, "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/P_01_048_J5_APC.Rds")
+saveRDS(P_01_049, "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/P_01_049_APC.Rds")
+
+saveRDS(P_01_050, "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/P_01_050_APC.Rds")
+saveRDS(P_01_051_J10, "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/P_01_051_J10_APC.Rds")
+
+saveRDS(P_01_052, "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/P_01_052_APC.Rds")
+saveRDS(P_01_053, "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/P_01_053_APC.Rds")
+saveRDS(P_01_054_J0, "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/P_01_054_J0_APC.Rds")
+```
+
+
+```{r}
+tmp1=list.files("C:/Users/MakotoTeam/Documents/scRNAseq_previousData/")
+
+Pr1_05_01_J4=CreateSeuratObject(Read10X("C:/Users/MakotoTeam/Documents/scRNAseq_previousData/05_01_J4/"),min.cells = 20, min.features = 50, project="05_01_J4")
+
+for(i in seq(1, length(tmp1))){
+  assign(paste0("Pr1_", tmp1[i]),
+         CreateSeuratObject( Read10X(paste0("C:/Users/MakotoTeam/Documents/scRNAseq_previousData/",tmp1[i], "/")), project = tmp1[i],min.cells = 20, min.features = 50))}
+
+```
+
+Add the mito genes ratio:
+```{r}
+
+nm=grep("Pr1_",ls(),value = T)
+covid_round1=list(Pr1_01_040_J2,Pr1_01_042_J4)
+####
+
+   Pr1_01_040_J2[["percent.mito"]] <- PercentageFeatureSet( Pr1_01_040_J2, pattern = "^MT-")
+    Pr1_01_042_J4[["percent.mito"]] <- PercentageFeatureSet( Pr1_01_042_J4, pattern = "^MT-")
+     Pr1_01_37_J26[["percent.mito"]] <- PercentageFeatureSet( Pr1_01_37_J26, pattern = "^MT-")
+      Pr1_01_42_J0[["percent.mito"]] <- PercentageFeatureSet( Pr1_01_42_J0, pattern = "^MT-")
+      ##
+       Pr1_01_42_J16[["percent.mito"]] <- PercentageFeatureSet( Pr1_01_42_J16, pattern = "^MT-")
+        Pr1_01_43_J0[["percent.mito"]] <- PercentageFeatureSet( Pr1_01_43_J0, pattern = "^MT-")
+        
+         Pr1_03_001_J1[["percent.mito"]] <- PercentageFeatureSet( Pr1_03_001_J1, pattern = "^MT-")
+         Pr1_03_01_J21[["percent.mito"]] <- PercentageFeatureSet( Pr1_03_01_J21, pattern = "^MT-")
+           Pr1_03_01_J5[["percent.mito"]] <- PercentageFeatureSet( Pr1_03_01_J5, pattern = "^MT-")
+            Pr1_04_001_J5[["percent.mito"]] <- PercentageFeatureSet( Pr1_04_001_J5, pattern = "^MT-")
+            ##
+             Pr1_04_01_J0[["percent.mito"]] <- PercentageFeatureSet( Pr1_04_01_J0, pattern = "^MT-")
+              Pr1_05_01_J1[["percent.mito"]] <- PercentageFeatureSet( Pr1_05_01_J1, pattern = "^MT-")
+               Pr1_05_01_J4[["percent.mito"]] <- PercentageFeatureSet( Pr1_05_01_J4, pattern = "^MT-")
+               ##
+               Pr1_05_02[["percent.mito"]] <- PercentageFeatureSet( Pr1_05_02, pattern = "^MT-")
+             
+                Pr1_CTRL_06_01_EDTA[["percent.mito"]] <- PercentageFeatureSet( Pr1_CTRL_06_01_EDTA, pattern = "^MT-")
+                 Pr1_CTRL_RPMI[["percent.mito"]] <- PercentageFeatureSet( Pr1_CTRL_RPMI, pattern = "^MT-")
+                  Pr1_P037_J0[["percent.mito"]] <- PercentageFeatureSet( Pr1_P037_J0, pattern = "^MT-")
+                   Pr1_P037_J4[["percent.mito"]] <- PercentageFeatureSet( Pr1_P037_J4, pattern = "^MT-")
+                   
+#######
+    Pr1_01_040_J2 <- QC( Pr1_01_040_J2)
+    Pr1_01_042_J4 <- QC( Pr1_01_042_J4)
+     Pr1_01_37_J26 <- QC( Pr1_01_37_J26)
+      Pr1_01_42_J0 <- QC( Pr1_01_42_J0)
+      ##
+       Pr1_01_42_J16 <- QC( Pr1_01_42_J16)
+        Pr1_01_43_J0 <- QC( Pr1_01_43_J0)
+        
+         Pr1_03_001_J1 <- QC( Pr1_03_001_J1)
+         Pr1_03_01_J21 <- QC( Pr1_03_01_J21)
+           Pr1_03_01_J5 <- QC( Pr1_03_01_J5)
+            Pr1_04_001_J5 <- QC( Pr1_04_001_J5)
+            ##
+             Pr1_04_01_J0 <- QC( Pr1_04_01_J0)
+              Pr1_05_01_J1 <-QC( Pr1_05_01_J1)
+              Pr1_05_01_J4 <-QC( Pr1_05_01_J4)
+               Pr1_05_02<- QC( Pr1_05_02)
+                Pr1_CTRL_06_01_EDTA <- QC( Pr1_CTRL_06_01_EDTA)
+                 Pr1_CTRL_RPMI <- QC( Pr1_CTRL_RPMI)
+                  Pr1_P037_J0 <- QC( Pr1_P037_J0)
+                   Pr1_P037_J4<- QC( Pr1_P037_J4)
+  ######################################
+       Pr1_01_040_J2 <- NormalizeData( Pr1_01_040_J2) %>% FindVariableFeatures(., selection.method = "vst", nfeatures = 3000)
+    Pr1_01_042_J4 <- NormalizeData( Pr1_01_042_J4)%>% FindVariableFeatures(., selection.method = "vst", nfeatures = 3000)
+     Pr1_01_37_J26 <- NormalizeData( Pr1_01_37_J26)%>% FindVariableFeatures(., selection.method = "vst", nfeatures = 3000)
+      Pr1_01_42_J0 <- NormalizeData( Pr1_01_42_J0)%>% FindVariableFeatures(., selection.method = "vst", nfeatures = 3000)
+      ##
+       Pr1_01_42_J16 <- NormalizeData( Pr1_01_42_J16)%>% FindVariableFeatures(., selection.method = "vst", nfeatures = 3000)
+        Pr1_01_43_J0 <- NormalizeData( Pr1_01_43_J0)%>% FindVariableFeatures(., selection.method = "vst", nfeatures = 3000)
+        
+         Pr1_03_001_J1 <- NormalizeData( Pr1_03_001_J1)%>% FindVariableFeatures(., selection.method = "vst", nfeatures = 3000)
+         Pr1_03_01_J21 <- NormalizeData( Pr1_03_01_J21)%>% FindVariableFeatures(., selection.method = "vst", nfeatures = 3000)
+           Pr1_03_01_J5 <- NormalizeData( Pr1_03_01_J5)%>% FindVariableFeatures(., selection.method = "vst", nfeatures = 3000)
+            Pr1_04_001_J5 <- NormalizeData( Pr1_04_001_J5)%>% FindVariableFeatures(., selection.method = "vst", nfeatures = 3000)
+            ##
+             Pr1_04_01_J0 <- NormalizeData( Pr1_04_01_J0)%>% FindVariableFeatures(., selection.method = "vst", nfeatures = 3000)
+              Pr1_05_01_J1 <-NormalizeData( Pr1_05_01_J1)%>% FindVariableFeatures(., selection.method = "vst", nfeatures = 3000)
+               Pr1_05_01_J4 <-NormalizeData( Pr1_05_01_J4)%>% FindVariableFeatures(., selection.method = "vst", nfeatures = 3000)
+               
+               Pr1_05_02<- NormalizeData( Pr1_05_02)%>% FindVariableFeatures(., selection.method = "vst", nfeatures = 3000)
+                Pr1_CTRL_06_01_EDTA <- NormalizeData( Pr1_CTRL_06_01_EDTA)%>% FindVariableFeatures(., selection.method = "vst", nfeatures = 3000)
+                 Pr1_CTRL_RPMI <- NormalizeData( Pr1_CTRL_RPMI)%>% FindVariableFeatures(., selection.method = "vst", nfeatures = 3000)
+                  Pr1_P037_J0 <- NormalizeData( Pr1_P037_J0)%>% FindVariableFeatures(., selection.method = "vst", nfeatures = 3000)
+                   Pr1_P037_J4<- NormalizeData( Pr1_P037_J4)   %>% FindVariableFeatures(., selection.method = "vst", nfeatures = 3000)          
+
+
+ ########################
+                   
+ctp= c( pDC, cDC, monocytes, asDC)
+cnp= c( "pDC", "cDC", "monocytes", "asDC")
+
+for (i in seq(1:length(ctp))) {
+  Pr1_05_01_J4 =AddModuleScore( Pr1_05_01_J4, features = ctp[i], name = cnp[i])
+  
+   Pr1_01_040_J2 <- AddModuleScore( Pr1_01_040_J2, features = ctp[i], name = cnp[i])
+    Pr1_01_042_J4 <- AddModuleScore( Pr1_01_042_J4, features = ctp[i], name = cnp[i])
+     Pr1_01_37_J26 <- AddModuleScore( Pr1_01_37_J26, features = ctp[i], name = cnp[i])
+      Pr1_01_42_J0 <- AddModuleScore( Pr1_01_42_J0, features = ctp[i], name = cnp[i])
+      ##
+       Pr1_01_42_J16 <- AddModuleScore( Pr1_01_42_J16, features = ctp[i], name = cnp[i])
+        Pr1_01_43_J0 <- AddModuleScore( Pr1_01_43_J0, features = ctp[i], name = cnp[i])
+        
+         Pr1_03_001_J1 <- AddModuleScore( Pr1_03_001_J1, features = ctp[i], name = cnp[i])
+         Pr1_03_01_J21 <- AddModuleScore( Pr1_03_01_J21, features = ctp[i], name = cnp[i])
+           Pr1_03_01_J5 <- AddModuleScore( Pr1_03_01_J5, features = ctp[i], name = cnp[i])
+            Pr1_04_001_J5 <- AddModuleScore( Pr1_04_001_J5, features = ctp[i], name = cnp[i])
+            ##
+             Pr1_04_01_J0 <- AddModuleScore( Pr1_04_01_J0, features = ctp[i], name = cnp[i])
+              Pr1_05_01_J1 <-AddModuleScore( Pr1_05_01_J1, features = ctp[i], name = cnp[i])
+               Pr1_05_02<- AddModuleScore( Pr1_05_02, features = ctp[i], name = cnp[i])
+                Pr1_CTRL_06_01_EDTA <- AddModuleScore( Pr1_CTRL_06_01_EDTA, features = ctp[i], name = cnp[i])
+                 Pr1_CTRL_RPMI <- AddModuleScore( Pr1_CTRL_RPMI, features = ctp[i], name = cnp[i])
+                  Pr1_P037_J0 <- AddModuleScore( Pr1_P037_J0, features = ctp[i], name = cnp[i])
+                   Pr1_P037_J4<- AddModuleScore( Pr1_P037_J4, features = ctp[i], name = cnp[i])}
+
+
+####
+
+ct= c( NK, B, plasmaCells,Tcells, Platelet )
+cn= c(  "NK", "B", "plasmaCells","Tcells", "Platelet")
+for (i in seq(1:length(ct))) {
+  Pr1_05_01_J4 =AddModuleScore( Pr1_05_01_J4, features = ctp[i], name = cnp[i])
+
+   Pr1_05_01_J4 =AddModuleScore( Pr1_05_01_J4, features = ctp[i], name = cnp[i])
+ Pr1_01_040_J2 <- AddModuleScore( Pr1_01_040_J2, features = ct[i], name = cn[i])
+    Pr1_01_042_J4 <- AddModuleScore( Pr1_01_042_J4, features = ct[i], name = cn[i])
+     Pr1_01_37_J26 <- AddModuleScore( Pr1_01_37_J26, features = ct[i], name = cn[i])
+      Pr1_01_42_J0 <- AddModuleScore( Pr1_01_42_J0, features = ct[i], name = cn[i])
+      ##
+       Pr1_01_42_J16 <- AddModuleScore( Pr1_01_42_J16, features = ct[i], name = cn[i])
+        Pr1_01_43_J0 <- AddModuleScore( Pr1_01_43_J0, features = ct[i], name = cn[i])
+        
+         Pr1_03_001_J1 <- AddModuleScore( Pr1_03_001_J1, features = ct[i], name = cn[i])
+         Pr1_03_01_J21 <- AddModuleScore( Pr1_03_01_J21, features = ct[i], name = cn[i])
+           Pr1_03_01_J5 <- AddModuleScore( Pr1_03_01_J5, features = ct[i], name = cn[i])
+            Pr1_04_001_J5 <- AddModuleScore( Pr1_04_001_J5, features = ct[i], name = cn[i])
+            ##
+             Pr1_04_01_J0 <- AddModuleScore( Pr1_04_01_J0, features = ct[i], name = cn[i])
+              Pr1_05_01_J1 <-AddModuleScore( Pr1_05_01_J1, features = ct[i], name = cn[i])
+               Pr1_05_02<- AddModuleScore( Pr1_05_02, features = ct[i], name = cn[i])
+                Pr1_CTRL_06_01_EDTA <- AddModuleScore( Pr1_CTRL_06_01_EDTA, features = ct[i], name = cn[i])
+                 Pr1_CTRL_RPMI <- AddModuleScore( Pr1_CTRL_RPMI, features = ct[i], name = cn[i])
+                  Pr1_P037_J0 <- AddModuleScore( Pr1_P037_J0, features = ct[i], name = cn[i])
+                   Pr1_P037_J4<- AddModuleScore( Pr1_P037_J4, features = ct[i], name = cn[i])}
+########
+
+ Pr1_01_040_J2 <- AddModuleScore( Pr1_01_040_J2, features = asDC, name = "asDC")
+    Pr1_01_042_J4 <- AddModuleScore( Pr1_01_042_J4, features = asDC, name = "asDC")
+     Pr1_01_37_J26 <- AddModuleScore( Pr1_01_37_J26, features = asDC, name = "asDC")
+      Pr1_01_42_J0 <- AddModuleScore( Pr1_01_42_J0, features = asDC, name = "asDC")
+      ##
+       Pr1_01_42_J16 <- AddModuleScore( Pr1_01_42_J16, features = asDC, name = "asDC")
+        Pr1_01_43_J0 <- AddModuleScore( Pr1_01_43_J0, features = asDC, name = "asDC")
+        
+         Pr1_03_001_J1 <- AddModuleScore( Pr1_03_001_J1, features = asDC, name = "asDC")
+         Pr1_03_01_J21 <- AddModuleScore( Pr1_03_01_J21, features = asDC, name = "asDC")
+           Pr1_03_01_J5 <- AddModuleScore( Pr1_03_01_J5, features = asDC, name = "asDC")
+            Pr1_04_001_J5 <- AddModuleScore( Pr1_04_001_J5, features = asDC, name = "asDC")
+            ##
+             Pr1_04_01_J0 <- AddModuleScore( Pr1_04_01_J0, features = asDC, name = "asDC")
+              Pr1_05_01_J1 <-AddModuleScore( Pr1_05_01_J1, features = asDC, name = "asDC")
+               Pr1_05_02<- AddModuleScore( Pr1_05_02, features = asDC, name = "asDC")
+                Pr1_CTRL_06_01_EDTA <- AddModuleScore( Pr1_CTRL_06_01_EDTA, features = asDC, name = "asDC")
+                 Pr1_CTRL_RPMI <- AddModuleScore( Pr1_CTRL_RPMI, features = asDC, name = "asDC")
+                  Pr1_P037_J0 <- AddModuleScore( Pr1_P037_J0, features = asDC, name = "asDC")
+                   Pr1_P037_J4<- AddModuleScore( Pr1_P037_J4, features = asDC, name = "asDC")
+                   Pr1_01_040_J2$asDC1=rep(0, ncol(Pr1_01_040_J2))
+###############
+
+ Pr1_01_040_J2 <- keepAPC( Pr1_01_040_J2)%>%  DietSeurat() %>% NormalizeData()
+
+    Pr1_01_042_J4 <- keepAPC( Pr1_01_042_J4)%>%  DietSeurat() %>% NormalizeData()
+     Pr1_01_37_J26 <- keepAPC( Pr1_01_37_J26)%>%  DietSeurat() %>% NormalizeData()
+      Pr1_01_42_J0 <- keepAPC( Pr1_01_42_J0)%>%  DietSeurat() %>% NormalizeData()
+      ##
+       Pr1_01_42_J16 <- keepAPC( Pr1_01_42_J16)%>%  DietSeurat() %>% NormalizeData()
+        Pr1_01_43_J0 <- keepAPC( Pr1_01_43_J0)%>%  DietSeurat() %>% NormalizeData()
+        
+         Pr1_03_001_J1 <- keepAPC( Pr1_03_001_J1)%>%  DietSeurat() %>% NormalizeData()
+         Pr1_03_01_J21 <- keepAPC( Pr1_03_01_J21)%>%  DietSeurat() %>% NormalizeData()
+           Pr1_03_01_J5 <- keepAPC( Pr1_03_01_J5)%>%  DietSeurat() %>% NormalizeData()
+            Pr1_04_001_J5 <- keepAPC( Pr1_04_001_J5)%>%  DietSeurat() %>% NormalizeData()
+            ##
+             Pr1_04_01_J0 <- keepAPC( Pr1_04_01_J0)%>%  DietSeurat() %>% NormalizeData()
+              Pr1_05_01_J1 <-keepAPC( Pr1_05_01_J1)%>%  DietSeurat() %>% NormalizeData()
+               Pr1_05_01_J4 <-keepAPC( Pr1_05_01_J4)%>%  DietSeurat() %>% NormalizeData()
+               Pr1_05_02<- keepAPC( Pr1_05_02)%>%  DietSeurat() %>% NormalizeData()
+                Pr1_CTRL_06_01_EDTA <- keepAPC( Pr1_CTRL_06_01_EDTA)%>%  DietSeurat() %>% NormalizeData()
+                 Pr1_CTRL_RPMI <- keepAPC( Pr1_CTRL_RPMI)%>%  DietSeurat() %>% NormalizeData()
+                  Pr1_P037_J0 <- keepAPC( Pr1_P037_J0)%>%  DietSeurat() %>% NormalizeData()
+                   Pr1_P037_J4<- keepAPC( Pr1_P037_J4)%>%  DietSeurat() %>% NormalizeData()
+```
+
+save the objects:
+```{r}
+
+saveRDS(Pr1_01_040_J2, "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/APC_CTRL_COVID_ROUND1/Pr1_01_040_J2.Rds"  )
+saveRDS( Pr1_01_042_J4 ,"C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/APC_CTRL_COVID_ROUND1/Pr1_01_042_J4.Rds")
+saveRDS( Pr1_01_37_J26 , "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/APC_CTRL_COVID_ROUND1/ Pr1_01_37_J26.Rds")
+saveRDS( Pr1_01_42_J0, "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/APC_CTRL_COVID_ROUND1/Pr1_01_42_J0.Rds")
+      ##
+saveRDS( Pr1_01_42_J16 ,"C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/APC_CTRL_COVID_ROUND1/Pr1_01_42_J16.Rds")
+saveRDS(  Pr1_01_43_J0, "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/APC_CTRL_COVID_ROUND1/ Pr1_01_43_J0.Rds")
+        
+saveRDS(  Pr1_03_001_J1,"C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/APC_CTRL_COVID_ROUND1/ Pr1_03_001_J1.Rds")
+saveRDS(  Pr1_03_01_J21, "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/APC_CTRL_COVID_ROUND1/ Pr1_03_01_J21.Rds")
+saveRDS(  Pr1_03_01_J5, "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/APC_CTRL_COVID_ROUND1/ Pr1_03_01_J5.Rds")
+saveRDS( Pr1_04_001_J5, "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/APC_CTRL_COVID_ROUND1/ Pr1_04_001_J5.Rds")
+            ##
+saveRDS( Pr1_04_01_J0, "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/APC_CTRL_COVID_ROUND1/ Pr1_04_01_J0.Rds")
+saveRDS(  Pr1_05_01_J1, "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/APC_CTRL_COVID_ROUND1/ Pr1_05_01_J1.Rds")
+saveRDS(  Pr1_05_01_J4, "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/APC_CTRL_COVID_ROUND1/ Pr1_05_01_J4.Rds")
+##
+saveRDS(   Pr1_05_02,"C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/APC_CTRL_COVID_ROUND1/ Pr1_05_02.Rds")
+saveRDS( Pr1_CTRL_06_01_EDTA, "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/APC_CTRL_COVID_ROUND1/ Pr1_CTRL_06_01_EDTA.Rds")
+saveRDS( Pr1_CTRL_RPMI ,"C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/APC_CTRL_COVID_ROUND1/ Pr1_CTRL_RPMI.Rds")
+saveRDS(  Pr1_P037_J0 ,"C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/APC_CTRL_COVID_ROUND1/ Pr1_P037_J0.Rds")
+saveRDS(  Pr1_P037_J4,"C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/APC_CTRL_COVID_ROUND1/ Pr1_P037_J4.Rds")
+```
+
+
+```{r}
+library(devtools)
+install_github("immunogenomics/harmony")
+library(harmony)
+```
+
+
+RUN INTEGRATION:
+```{r}
+COVID.list <-list(P_01_047,P_01_048_J0,P_01_048_J5,P_01_049,P_01_050,P_01_051,P_01_051_J10,P_01_052,P_01_053, P_01_054_J0, c1, c2,c3, Pr1_01_040_J2,Pr1_01_042_J4,Pr1_01_37_J26,Pr1_01_42_J0,Pr1_01_42_J16,Pr1_01_43_J0, Pr1_03_001_J1,Pr1_03_01_J21,Pr1_03_01_J5, Pr1_04_001_J5,Pr1_04_01_J0,Pr1_05_01_J1,Pr1_05_01_J4,Pr1_05_02,Pr1_CTRL_06_01_EDTA,Pr1_CTRL_RPMI,Pr1_P037_J0,Pr1_P037_J4 )
+####
+QC2=function(x){
+  x=subset(x, subset  = nFeature_RNA > 100 & nCount_RNA > 100 )
+  return(x)}
+
+for (i in 1:length(COVID.list)) {
+   # COVID.list[[i]] <- QC2(COVID.list[[i]])
+      COVID.list[[i]]=subset( COVID.list[[i]], subset  = nFeature_RNA > 100 & nCount_RNA > 100 )}
+
+
+library("glmGamPoi")
+
+k.filter <- min(200, min(sapply(COVID.list, ncol)))
+
+for (i in 1:length(COVID.list)) {
+    COVID.list[[i]] <- SCTransform(COVID.list[[i]], verbose = FALSE,variable.features.n = 2000,method = "glmGamPoi")}
+
+COVID.features <- SelectIntegrationFeatures(object.list = COVID.list, nfeatures = 3000,k.filter = k.filter)
+
+COVID_merged <- merge(COVID.list[[1]], y = COVID.list[2:length(COVID.list)],   project = "COVID",  merge.data = TRUE)
+VariableFeatures(COVID_merged) <- COVID.features
+
+COVID_merged <- RunPCA(object = COVID_merged, assay = "SCT", npcs = 50)
+COVID_merged <- RunHarmony(object = COVID_merged,
+                                    assay.use = "SCT",
+                                    reduction = "pca",
+                                    group.by.vars = "orig.ident",
+                                    dims.use = 1:50,
+                                    plot_convergence = TRUE)
+COVID_merged <- RunUMAP(object = COVID_merged, assay = "SCT", reduction = "harmony", dims = 1:50)
+COVID_merged <- FindNeighbors(object = COVID_merged, assay = "SCT", reduction = "harmony", dims = 1:50)
+DefaultAssay(COVID_merged) = "SCT"
+COVID_merged <- FindClusters(object = COVID_merged, resolution = 1.2)
+```
+
+
+ADD ANNOTATION:
+```{r}
+DefaultAssay(COVID_merged)="RNA"
+VlnPlot(COVID_merged, c("TCF4", "CLEC4C", "IRF7", "IRF8", "LILRA4", "IL3RA", "TLR9", "SPIB"))
+VlnPlot(COVID_merged, c("ANPEP",  "CD1C", "ITGAX", "CST3", "FCER1A"))
+VlnPlot(COVID_merged, c("CD14", "FCGR1A"," S100A12", "FCGR3A", "MS4A7", "LYZ", "CXCR3"))
+VlnPlot(COVID_merged, c("AXL", "SIGLEC6","CD22"))
+```
+
+CORRECTED ON 08/12:
+Increased clustering resolution to 1.0
+
+```{r}
+Idents(COVID_merged)="seurat_clusters"
+cellannotation= c("CD14+ Monocytes","CD1c+ DC",
+                  "CD14+ Monocytes","CD14+ Monocytes","CD14+ Monocytes",
+                  "pDC", "CD14+ Monocytes", "CD14+ Monocytes",
+                  "CD1c+ DC", "CD14+ Monocytes",
+                  "CD16+ Monocytes","CLEC9a+ DC",
+                  "CD14+ Monocytes", "CD14+ Monocytes","CD14+ Monocytes",
+                  "asDC",
+                  "CD14+ Monocytes","Undetermined",
+                  "CD1c+ DC","CD1c+ DC",  "CD1c+ DC", "CD14+ Monocytes","CD14+ Monocytes",
+                   "CD1c+ DC", "Undetermined", "Undetermined", "Undetermined")
+Idents(COVID_merged)="seurat_clusters"
+                  
+names(cellannotation)= levels(Idents(COVID_merged))
+
+COVID_merged=RenameIdents(COVID_merged, cellannotation)
+COVID_merged$celltype=Idents(COVID_merged)
+covid= COVID_merged
+###remove the undetermined:
+COVID_merged= SubsetData(COVID_merged, ident.remove = "Undetermined")
+saveRDS(COVID_merged, "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/COVID_EDTA_RPMI_RDS/COVID_Merged_12122020.Rds")
+```
+
+```{r}
+path="C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/COVID_EDTA_RPMI_RDS/"
+library(RColorBrewer)
+library(ggpubr)
+getPalette = colorRampPalette(brewer.pal(6, "Set1"))
+p1=DimPlot(COVID_merged, group.by = "celltype", cols= getPalette(length(unique(COVID_merged$celltype))), label.size = 6, pt.size = 0.8, label.color = "black", label.box = T) 
+##
+ggsave(filename=paste0("improved_COVID19_ALL_merged_APC_UMAP_CELLTYPE_",Sys.Date(),".png"), plot=p1, device="png",
+       path= path, height=8, width=8, units="in", dpi=500)
+##
+getPalette = colorRampPalette(brewer.pal(8, "Dark2"))
+p2=DimPlot(COVID_merged, group.by = "orig.ident", cols= getPalette(length(unique(COVID_merged$orig.ident))),label.size = 6, pt.size = 0.8)
+
+ggsave(filename=paste0("improved_COVID19_ALL_merged_APC_UMAP_Patient_",Sys.Date(),".png"), plot=p2, device="png",
+       path= path, height=8, width=8, units="in", dpi=500)
+```
+
+
+ADD THE METADATA ON SEVERITY AND ON EDTA VS RPMI:
+ADD EXPR CONDITION:
+```{r}
+nm=grep("Pr1_",ls(),value = T)
+
+COVID_merged$condition =
+  ifelse(COVID_merged$orig.ident== "05_01_J1"  | COVID_merged$orig.ident== "05_01_J4"| COVID_merged$orig.ident== "05_02" | COVID_merged$orig.ident== "CTRL_06_01_EDTA" | COVID_merged$orig.ident== "P037_J0" | COVID_merged$orig.ident== "P037_J4" | COVID_merged$orig.ident== "03_001_J1" | COVID_merged$orig.ident== "03_01_J5"| COVID_merged$orig.ident== "01_040_J2"| 
+           
+           COVID_merged$orig.ident== "CTRL_02021" |  COVID_merged$orig.ident== "CTRL_02022" |  COVID_merged$orig.ident== "01_049" |  COVID_merged$orig.ident== "01_052" |  COVID_merged$orig.ident== "01_054_J0" , "EDTA", "RPMI")
+```
+
+when annotating do not forget to respect the same nomenclature
+```{r}
+COVID_merged$severity =
+  ifelse(COVID_merged$orig.ident== "01_052"  | COVID_merged$orig.ident== "01_051"| COVID_merged$orig.ident== "01_048_J0" | COVID_merged$orig.ident== "01_048_J5" | COVID_merged$orig.ident== "04_001_J5" | COVID_merged$orig.ident== "04_01_J0" | COVID_merged$orig.ident== "05_01_J4" | COVID_merged$orig.ident== "05_01_J1" | COVID_merged$orig.ident== "05_02" , "Moderate",
+   ifelse( COVID_merged$orig.ident== "CTRL_RPMI"| COVID_merged$orig.ident== "CTRL_02020RPMI"| COVID_merged$orig.ident== "CTRL_02021"| COVID_merged$orig.ident== "CTRL_02022"| COVID_merged$orig.ident== "CTRL_06_01_EDTA", "Healthy", "Severe"))
+```
+
+
+```{r}
+female= WhichCells(COVID_merged, expression =  XIST > 0.1)
+COVID_merged$gender= ifelse(colnames(COVID_merged) %in% female, "Female", "Male" ) 
+p= DimPlot(COVID_merged, group.by  = "gender")
+
+ggsave(filename=paste0("improved_COVID19_ALL_merged_APC_UMAP_Gender_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=8, width=8, units="in", dpi=500)
+```
+
+
+
+```{r}
+getPalette = colorRampPalette(brewer.pal(6, "Dark2"))
+p3=DimPlot(COVID_merged, group.by = "severity", cols= getPalette(length(unique(COVID_merged$severity))), label.size = 6, pt.size = 0.5, label.color = "black", label.box = T) 
+
+ggsave(filename=paste0("improved_COVID19_ALL_merged_APC_UMAP_Severity_2_",Sys.Date(),".png"), plot=p3, device="png",
+       path= path, height=8, width=8, units="in", dpi=500)
+####
+getPalette = colorRampPalette(brewer.pal(7, "Dark2"))
+
+p4=DimPlot(COVID_merged, group.by = "condition", cols= getPalette(length(unique(COVID_merged$condition))), label.size = 6, pt.size = 0.5, label.color = "black", label.box = T) 
+
+ggsave(filename=paste0("improvedCOVID19_ALL_merged_APC_UMAP_CONDITION_2_",Sys.Date(),".png"), plot=p4, device="png",
+       path= path, height=8, width=8, units="in", dpi=500)
+```
+
+Generate the numbers: per edta and rpmi
+
+```{r}
+countable=function(c1, c2){
+xd=table(c1, c2)
+a=colnames(xd)
+b=rownames(xd)
+xd=as.matrix.data.frame(xd)
+colnames(xd)=a
+rownames(xd)=b
+xd=as.data.frame(xd)
+return(xd)}
+
+s1=countable(COVID_merged$orig.ident, COVID_merged$celltype)
+s2= countable( COVID_merged$celltype,COVID_merged$condition)
+##
+
+write.csv(s1, paste0(path,"improved_CELLTYPE_PATIENT.csv"))
+write.csv(s2, paste0(path,"improved_CELLTYPE_CONDITION.csv"))
+```
+
+```{r}
+saveRDS(COVID_merged,paste0("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/COVID_EDTA_RPMI_RDS/","COVID_MERGED_EDTA_RPMI_CORRECTED_", Sys.Date(), ".Rds"))
+```
+
+
+
+
