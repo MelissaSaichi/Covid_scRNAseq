@@ -1,0 +1,695 @@
+---
+title: "RPMI_APC_ANALYSIS"
+author: "MELISSA"
+date: "06/12/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+COVID_merged= readRDS("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/COVID_rpmi_RPMI_RDS/COVID_MERGED_rpmi_RPMI_CORRECTED_2020-12-12.Rds")
+#☺
+path="C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/COVID_RPMI_12122020/"
+```
+
+```{r}
+countable=function(c1, c2){
+xd=table(c1, c2)
+a=colnames(xd)
+b=rownames(xd)
+xd=as.matrix.data.frame(xd)
+colnames(xd)=a
+rownames(xd)=b
+xd=as.data.frame(xd)
+return(xd)}
+```
+
+START WITH rpmi:
+```{r}
+Idents(COVID_merged)="condition"
+rpmi= subset(COVID_merged, idents="RPMI")
+###
+s1=countable(rpmi$orig.ident, rpmi$celltype)
+write.csv(s1, paste0(path,"improved_CELLTYPE_PATIENT_rpmi.csv"))
+s2= countable( rpmi$celltype,rpmi$condition)
+write.csv(s2, paste0(path,"improved_CELLTYPE_CONDITION_rpmi.csv"))
+s3= countable( rpmi$severity, rpmi$celltype)
+write.csv(s3, paste0(path,"improved_CELLTYPE_SEVERITY_rpmi.csv"))
+```
+
+redo clustering on RPMI:
+```{r}
+library(RColorBrewer)
+DefaultAssay(rpmi)="SCT"
+#rpmi=rpmi %>% RunPCA( ) %>%  FindNeighbors(., dims = 1:30)  %>% FindClusters(., resolution = 0.8)  %>% RunUMAP(., dims = 1:30)
+###
+getPalette = colorRampPalette(brewer.pal(6, "Set1"))
+p1=DimPlot(rpmi, group.by = "celltype", cols= getPalette(length(unique(rpmi$celltype))), label.size = 6, pt.size = 0.5, label.color = "black", label.box = T) +   theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+##
+ggsave(filename=paste0("SUBCLUSTERED_rpmi_SCT_APC_UMAP_CELLTYPE_",Sys.Date(),".png"), plot=p1, device="png",
+       path= path, height=8, width=8, units="in", dpi=500)
+
+#######
+getPalette = colorRampPalette(brewer.pal(8, "Dark2"))
+p2=DimPlot(rpmi, group.by = "orig.ident", cols= getPalette(length(unique(rpmi$orig.ident))),label.size = 6, pt.size = 0.5)+   theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+
+ggsave(filename=paste0("SUBCLUSTERED_rpmi_SCT_merged_APC_UMAP_Patient_",Sys.Date(),".png"), plot=p2, device="png",
+       path= path, height=8, width=8, units="in", dpi=500)
+
+#####
+getPalette = colorRampPalette(brewer.pal(6, "Dark2"))
+p3=DimPlot(rpmi, group.by = "severity", cols= getPalette(length(unique(rpmi$severity))), label.size = 6, pt.size = 0.5, label.color = "black", label.box = T) +   theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+
+ggsave(filename=paste0("SUBCLUSTERED_rpmi_SCT_APC_UMAP_Severity_2_",Sys.Date(),".png"), plot=p3, device="png",
+       path= path, height=8, width=8, units="in", dpi=500)
+```
+###############################4
+```{r}
+getPalette = colorRampPalette(brewer.pal(6, "Set1"))
+p1=DimPlot(rpmi2, group.by = "celltype", cols= getPalette(length(unique(rpmi2$celltype))), label.size = 6, pt.size = 0.5, label.color = "black", label.box = T) +   theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+##
+ggsave(filename=paste0("SUBCLUSTERED_rpmi_SCT_APC_UMAP_CELLTYPE_NONSUBCLUSTERED_",Sys.Date(),".png"), plot=p1, device="png",
+       path= path, height=8, width=8, units="in", dpi=500)
+
+#######
+getPalette = colorRampPalette(brewer.pal(8, "Dark2"))
+p2=DimPlot(rpmi2, group.by = "orig.ident", cols= getPalette(length(unique(rpmi2$orig.ident))),label.size = 6, pt.size = 0.5)+   theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+
+ggsave(filename=paste0("SUBCLUSTERED_rpmi_SCT_merged_APC_UMAP_Patient_NONSUBCLUSTERED_",Sys.Date(),".png"), plot=p2, device="png",
+       path= path, height=8, width=8, units="in", dpi=500)
+
+#####
+getPalette = colorRampPalette(brewer.pal(6, "Dark2"))
+p3=DimPlot(rpmi2, group.by = "severity", cols= getPalette(length(unique(rpmi2$severity))), label.size = 6, pt.size = 0.8, label.color = "black", label.box = T) +   theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+
+ggsave(filename=paste0("SUBCLUSTERED_rpmi_SCT_APC_UMAP_Severity_NONSUBCLUSTERED_",Sys.Date(),".png"), plot=p3, device="png",
+       path= path, height=8, width=8, units="in", dpi=500)
+```
+
+
+```{r}
+rpmidata= as.data.frame(table(rpmi$celltype))
+rpmidata$Freq= round(rpmidata$Freq/sum(rpmidata$Freq),3)*100
+
+rpmidata$ymax = cumsum(rpmidata$Freq)
+rpmidata$ymin = c(0, head(rpmidata$ymax, n=-1))
+
+g=ggplot(data = rpmidata, 
+       aes(x = 2, y = Freq, fill = Var1))+
+  geom_bar(stat = "identity")+
+  coord_polar("y", start = 400) +
+ # geom_text(aes(y = Freq, label = paste(Freq,"%", sep = "")), col = "white") +
+   theme_void() +
+   scale_fill_brewer(palette = "Set1")+
+   xlim(.2,2.5)
+ggsave(filename=paste0("NOTSUBCLUSTERED_rpmi_SCT_APC_UMAP_Severity_2_DONUT_",Sys.Date(),".png"), plot=g, device="png",
+       path= path, height=8, width=8, units="in", dpi=500)  
+```
+
+
+Panel 1-B: STUCKED VIOLIN PLOT
+```{r}
+svp=subset(rpmi, CD3E < 0.1)
+features<- c("CD14", "FCGR3A", "CLEC9A", "CD1C", "CLEC4C", "IL3RA","AXL", "SIGLEC6", "HLA-DRB5", "ITGAX","CD86", "CD3E")
+Idents(svp)="celltype"
+DefaultAssay(svp)="RNA"
+p=StackedVlnPlot(obj = svp, features = features)+ theme( legend.text = element_text(color = "black", size = 10), family = "Helvetica", face = "bold")
+
+ggsave(filename=paste0("rpmi_UMAP_SEVERITY_SPLIT_StuckVln_improved",Sys.Date(),".png"), plot=p, device="png",
+       path= "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/RPMI_ANALYSIS/", height=10, width=6, units="in", dpi=500)
+```
+
+#####
+A: Heatmap of DEG per severity group:
+```{r}
+Idents(rpmi)="severity"
+DefaultAssay(rpmi)="RNA"
+library(dplyr)
+#&BiocManager::install("MAST")
+#library("MAST")
+j0.markers <- FindAllMarkers(rpmi, only.pos = TRUE, logfc.threshold = 0.25, min.pct = 0.1 ) %>% filter(.,p_val_adj<0.05 )
+j0.markers= j0.markers[-which(rownames(j0.markers) %in% grep("^IG", rownames(j0.markers), value = T)),]
+top20 <-j0.markers %>% group_by(cluster) %>% top_n(n = 20, wt = avg_logFC)
+
+levels(rpmi) <- c("Healthy", "Moderate", "Severe")
+
+cols= getPalette(length(unique(rpmi$severity)))
+avge=AverageExpression(object = rpmi, features = top20$gene, assay="RNA", return.seurat = T)
+levels(avge)= c("Healthy", "Moderate", "Severe")
+
+plot <- DoHeatmap(avge, group.colors=cols, features = rownames(avge),  assay = "RNA", slot= "scale.data", combine = T,draw.lines=F, hjust=0.1, angle = 0) + scale_fill_gradientn(colors = rev(RColorBrewer::brewer.pal(n = 10, name = "RdBu"))) +
+  theme (axis.text.x = element_text(size=12, face="bold", colour = "black",angle = 0),axis.text.y = element_text(size=12, face="bold", colour = "black",angle = 0))
+####
+ggsave(filename=paste0("HEATMAP_AVG_Expression_DEG8RPMI_",Sys.Date(),".png"), plot=plot, device="png",
+       path= path, height=12, width=6, units="in", dpi=500)
+
+###
+write.csv(j0.markers, paste0(path,"DEG_ALL_SEVERITY_rpmi_UP.csv"))
+```
+
+
+B: number of DEG per condition:
+```{r}
+DefaultAssay(rpmi)= "RNA"
+
+
+library(dplyr)
+Idents(rpmi)= "severity"
+severitymarkers <- FindAllMarkers(rpmi, only.pos = F, logfc.threshold = 0.25, min.pct = 0.1) %>% filter(.,p_val_adj<0.05 ) %>% .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),]
+severitymarkers$fc= ifelse(severitymarkers$avg_logFC<0, "Downregulated", "Upregulated")
+
+write.csv(severitymarkers, paste0(path,"DEG_ALL_SEVERITY_rpmi.csv"))
+
+res=as.data.frame.matrix(table(severitymarkers$cluster, severitymarkers$fc))
+res$severity=rownames(res)
+dat=reshape::melt(res)
+dat <- dat %>%
+  mutate(ifelse(dat$variable=="Upregulated",value,-1* value ))
+colnames(dat)=c(colnames(dat[,1:3]),"Number_DEG")
+p= ggplot(dat, aes(y = Number_DEG, x= severity, fill = variable))+
+  geom_bar(stat = "identity") + theme_classic() +scale_fill_manual(values=c('#999999','black'))
+##
+ggsave(filename=paste0("BARPLOT_DEG_ALLvsALL_SEVERITY_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=5, width=5, units="in", dpi=500)
+```
+
+###representation as a VENN DIAGRAM:
+```{r}
+ library("ggVennDiagram")
+x= list(Up_HD=j0.markers[which(j0.markers$cluster== "Healthy"),7], Up_Moderate=j0.markers[which(j0.markers$cluster== "Moderate"),7], Up_Severe=j0.markers[which(j0.markers$cluster== "Severe"),7])
+p=ggVennDiagram(x) + scale_fill_gradient(low="white",high = "red")
+ggsave(filename=paste0("VENNDIAGRAM_UP_ALLvsALL_SEVERITY_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=6, width=6, units="in", dpi=500)
+```
+
+
+DEG SEVERE vs MODERATE
+```{r}
+sm= FindMarkers(rpmi, ident.1 = "Moderate", ident.2 = "Severe", logfc.threshold = 0.25, only.pos = T, min.pct = 0.1)%>% filter(.,p_val_adj<0.05 ) %>% .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),]
+write.csv(sm, paste0(path,"DEG_SEVERE_vsMODERATE.csv"))
+library(tidyverse)
+library(pathfindR)
+library(viridis)
+###
+pathgenes_sm= sm[,c(2,5)] %>% rownames_to_column(., var="Gene_Symbol")
+
+pathoutput_sm= run_pathfindR(pathgenes_sm, gaThread= 6, gene_sets = c( "Reactome","GO-All"), visualize_enriched_terms=F,  silent_option = TRUE, output_dir = "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/RPMI_ANALYSIS/pathfindR_Results_SeverevsModerate")
+
+#write.csv(pathoutput_sm, paste0(path,"UP_MODERATEvsHD_ENRICHMENT_PaTHFINDR_TOP10.csv"))
+###
+ p=pathfindR::enrichment_chart(pathoutput_sm) + theme (axis.text.x = element_text(size=12, face="bold", colour = "black",angle = 0),axis.text.y = element_text(size=12, face="bold", colour = "black",angle = 0))+ scale_color_viridis(option="D")
+
+ ggsave(filename=paste0("ENRICHMENT_UPMODERATE vs _SEVERE_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=12, width=8, units="in", dpi=500)
+ 
+ 
+ dat=pathoutput_sm
+# dat$fc=ifelse(length(unlist(strsplit(dat$Up_regulated, ","))) > length(unlist(strsplit(dat$Down_regulated, ","))),  "Enriched in Severe","Enriched in Moderate")
+ dat= dat [, c(2,3)]
+ dat=reshape::melt(dat)
+ 
+ 
+dat=dat[order(dat$value, decreasing = T),]
+
+p= ggplot(dat[1:15,], aes(y = value, x= reorder(Term_Description, value)))+
+  geom_bar(stat = "identity")  +scale_fill_manual(values=c("#AD4C9E"))+ xlab("Enriched Pathways") + ylab("Fold_Enrichment") + coord_flip()+
+  theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=12, face="bold", colour = "black") ) + ggtitle("Enriched Pathways in  Moderate vs Severe vs APC")
+###
+ggsave(filename=paste0("ENRICHMENT_UP_SEVEREvsMODERATE_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, width=8,height=13, units="in", dpi=500)
+```
+
+CLN PLOT SEVERE VS MODERATE
+
+
+```{r}
+smp= sm %>% filter(., avg_logFC > 0.25)
+smp= smp[order(smp$avg_logFC, decreasing=T),]
+smp$rank= seq(1:nrow(smp))
+smp$gene=rownames(smp)
+library(ggrepel)
+p=ggplot(smp, aes(x= rank, y=avg_logFC)) +geom_point(col="blue") + geom_text_repel(
+    data = subset(smp, avg_logFC > 0.6),
+    aes(label = gene),
+    size = 5,
+    box.padding = unit(0.35, "lines"),
+    point.padding = unit(0.3, "lines")) +
+  theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black") ) + ggtitle("Upregulated Genes in Moderate APC vs Severe")
+##♠
+ggsave(filename=paste0("RANKED_PLOT_UPModerate_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=5, width=8, units="in", dpi=500)
+#########################################
+########################################
+sm= FindMarkers(rpmi, ident.2 = "Moderate", ident.1 = "Severe", logfc.threshold = 0.25, only.pos = T, min.pct = 0.1)%>% filter(.,p_val_adj<0.05 ) %>% .[-which(rownames(.) %in% grep("^MT-", rownames(.), value = T)),]
+sm= sm[-which(rownames(sm) %in% grep("^IG", rownames(sm), value = T)),]
+
+smn= sm %>% filter(., avg_logFC > (0.25))
+smn= smn[order(abs(smn$avg_logFC), decreasing=T),]
+smn$rank= seq(1:nrow(smn))
+smn$abs_avg_logFC=abs(smn$avg_logFC)
+smn$gene=rownames(smn)
+
+p=ggplot(smn, aes(x= rank, y=abs_avg_logFC)) +geom_point(col="red") + geom_text_repel(
+    data = subset(smn, abs_avg_logFC > 0.5),
+    aes(label = gene),
+    size = 5,
+    box.padding = unit(0.35, "lines"),
+    point.padding = unit(0.3, "lines")) +
+  theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black") ) + ggtitle("Upregulated Genes in Severe APC vs Moderate")
+##♠
+ggsave(filename=paste0("RANKED_PLOT_UPModerate_",Sys.Date(),".png"), plot=p, device="png",
+       path=path, height=6, width=8, units="in", dpi=500)
+```
+
+```{r}
+saveRDS(rpmi,"C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/COVID_RPMI_12122020/RPMI_FINAL.Rds" )
+```
+
+check pathways:
+```{r}
+Idents(rpmi)= "severity"
+DefaultAssay(rpmi)="RNA"
+hm= FindMarkers(rpmi, ident.1 = "Moderate", ident.2 = "Healthy", logfc.threshold = 0.25, only.pos = T, min.pct = 0.1) %>% filter(.,p_val_adj<0.05 ) %>% .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),]
+hs= FindMarkers(rpmi, ident.1 = "Severe", ident.2 = "Healthy", logfc.threshold = 0.25, only.pos = T, min.pct = 0.1) %>% filter(.,p_val_adj<0.05 ) %>% .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),]
+sm= FindMarkers(rpmi, ident.1 = "Moderate", ident.2 = "Severe", logfc.threshold = 0.25, only.pos = T, min.pct = 0.1) %>% filter(.,p_val_adj<0.05 ) %>% .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),]
+ms= FindMarkers(rpmi, ident.2 = "Moderate", ident.1 = "Severe", logfc.threshold = 0.25, only.pos = T, min.pct = 0.1) %>% filter(.,p_val_adj<0.05 ) %>% .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),]
+```
+
+Perform pathway enrichment analysis:
+```{r}
+
+deg1=function(data, X, Y){ #X: output of FindMarkers function, Y: Color of the bars
+#hpp=data[which(data$avg_logFC < (-0.25)),] 
+egmtp <- enricher(rownames(data) , TERM2GENE=m_t2g) ##WORKED ::
+###
+res.hp=egmtp@result
+##
+res.hp=res.hp[which(res.hp$p.adjust< 0.05),]
+
+res.hp=res.hp[,c(1,6)]
+res.hp$ID= gsub("HALLMARK_", "", res.hp$ID)
+res.hp$state=rep(X,nrow(res.hp))
+res.hp$p.adjust=-log10(res.hp$p.adjust)
+ p= ggplot(res.hp, aes(y = p.adjust, x= reorder(ID, -p.adjust), fill = state))+
+  geom_bar(stat = "identity", width=0.3)+ scale_fill_manual(values=c(Y))+
+  theme_classic()  + coord_flip()  +
+  theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=12, face="bold", colour = "black") ) +
+  xlab("Enriched Pathways") + ylab("-Log10(adjPvalue") +ggtitle(X)
+ return(p)
+}
+```
+
+```{r}
+path="C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/COVID_RPMI_12122020/"
+
+p=deg1(hm, "Upregulated_ModeratevsHealthy", "#AD4C9E")
+ggsave(filename=paste0("MSIG_Upregulated_ModeratevsHealthy_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=7, width=9, units="in", dpi=500)
+###
+
+p=deg1(hs, "Upregulated_SeverevsHealthy", "#E6AB02")
+ggsave(filename=paste0("MSIG_UpregulatedSeverevsHealthy_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=7, width=9, units="in", dpi=500)
+```
+
+
+```{r}
+us=enricher(rownames(ms) , TERM2GENE=m_t2g) @result %>% filter(., p.adjust< 0.05) %>% .[,c(1,6)]
+us$ID= gsub("HALLMARK_", "",us$ID)
+us$p.adjust=-log10(us$p.adjust)
+us$state= rep("Up_Severe", nrow(us))
+####
+um=enricher(rownames(sm) , TERM2GENE=m_t2g) @result %>% filter(., p.adjust< 0.05) %>% .[,c(1,6)]
+um$ID= gsub("HALLMARK_", "",um$ID)
+um$p.adjust=-log10(um$p.adjust)
+um$state= rep("Up_Moderate", nrow(um))
+####
+dat=rbind(us,um)
+dat= reshape::melt(dat)
+dat <- dat %>%
+  mutate(ifelse(dat$state=="Up_Severe",value,-1* value ))
+
+colnames(dat)=c(colnames(dat[,1:4]),"Adj.Pvalue")
+
+dat=dat[order(dat$value, decreasing = T),]
+
+p= ggplot(dat, aes(y = Adj.Pvalue, x= reorder(ID, Adj.Pvalue), fill = state))+
+  geom_bar(stat = "identity") + theme_classic() +scale_fill_manual(values=c("#AD4C9E","#E6AB02"))+ xlab("Enriched Pathways") + ylab("-log10(Adjusted_Pvalues)") + coord_flip()+
+  theme (axis.text.x = element_text(size=12, face="bold", colour = "black", angle = 90),axis.text.y = element_text(size=12, face="bold", colour = "black"),legend.text = element_text(face = "bold", size = 12 )) + ggtitle("Enriched pathways in Severe_Moderate")
+
+
+ggsave(filename=paste0("MSIG_SeverevsModerate_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=10, width=10, units="in", dpi=500)
+```
+
+
+ISOLATE PDC AND CHECK THE ANTIVIRAL/
+
+```{r}
+library(dplyr)
+Idents(rpmi)="celltype"
+pDC= subset(rpmi, idents="pDC") # 4450
+##
+library(RColorBrewer)
+
+DefaultAssay(pDC)="SCT"
+pDC=pDC %>% FindVariableFeatures()%>% RunPCA( ) %>%  FindNeighbors(., dims = 1:30)  %>% FindClusters(., resolution = 0.8)  %>% RunUMAP(., dims = 1:30)
+
+getPalette = colorRampPalette(brewer.pal(8, "Dark2"))
+p2=DimPlot(pDC, group.by = "orig.ident", cols= getPalette(length(unique(pDC$orig.ident))),label.size = 6, pt.size = 1) +theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+
+ggsave(filename=paste0("SUBCLUSTERED_rpmi_SCT_merged_pDC_UMAP_Patient_",Sys.Date(),".png"), plot=p2, device="png",
+       path= path, height=5, width=5, units="in", dpi=500)
+
+#####
+getPalette = colorRampPalette(brewer.pal(6, "Dark2"))
+p3=DimPlot(pDC, group.by = "severity", cols= getPalette(length(unique(pDC$severity))), label.size = 6, pt.size = 1, label.color = "black", label.box = T) +theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+
+ggsave(filename=paste0("SUBCLUSTERED_rpmi_SCT_pDC_UMAP_Severity_2_",Sys.Date(),".png"), plot=p3, device="png",
+       path= path, height=5, width=5, units="in", dpi=500)
+```
+
+
+```{r}
+DefaultAssay(pDC)= "RNA"
+Idents(pDC)="severity"
+levels(pDC) <- c("Healthy", "Moderate", "Severe")
+ cols= getPalette(length(unique(pDC$severity)))
+mpDC=FindAllMarkers(pDC, only.pos = TRUE, logfc.threshold = 0.25, min.pct = 0.1) %>% filter(.,p_val_adj<0.05 ) %>% .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),] 
+
+top10 <-mpDC %>% group_by(cluster) %>% top_n(n = 10, wt = avg_logFC)
+
+ph=DoHeatmap(pDC, features = top10$gene, group.colors=cols ,hjust=F, angle = 0, size = 4) + scale_fill_gradientn(colors = rev(RColorBrewer::brewer.pal(n = 10, name = "RdBu")))   +
+  theme (axis.text.y = element_text(size=12, face="bold", colour = "black",angle = 0)) + NoLegend()
+
+ggsave(filename=paste0("pDC_HEATMAP_Severity_TOP10DEG_",Sys.Date(),".png"), plot=ph, device="png",
+       path= path, height=8, width=7, units="in", dpi=500)
+
+```
+
+
+```{r}
+functions=c("GZMB", "TNFSF10", "ITGB2", "MX2", "ISG20", "IRF7", "IFIT2", "BST2", "ISG15", "MX1", "OAS1", "IFITM2", "TRIM5", "ADAR", "CGAS", "DHX36", "DHX9", "PYCARD","TMEM173" ,"TLR7", "TLR9", "CCL20", "CCL5", "CCL3", "IL18",  "TNFSF13B")
+p=DotPlot(pDC, features=functions, dot.scale = 8, group.by = "severity", assay = "RNA") +  scale_color_viridis(option="D") + 
+  theme (axis.text.x = element_text(size=12, face="bold", colour = "black",angle = 90),axis.text.y = element_text(size=12, face="bold", colour = "black",angle = 0),legend.text = element_text(face = "bold", size = 10)) + geom_vline(xintercept = c(3.5,14.5,21.5), linetype="dotted", color = "black", size=1.5)
+
+ggsave(filename=paste0("FUNCTIONS_PDC_INVERTED_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=5, width=12, units="in", dpi=500)
+```
+
+
+```{r}
+DefaultAssay(pDC)="RNA"
+getPalette = colorRampPalette(brewer.pal(6, "Dark2"))
+ cols= getPalette(length(unique(pDC$severity)))
+genes= c("TLR9", "TLR7", "DHX36", "ISG20", "PICARD", "ADAR", "GZMB", "IFNAR1", "IFNAR2", "IRF7")
+p <-VlnPlot(pDC, genes, cols =cols, pt.size = 0, combine = F, group.by = "severity" )
+for(i in 1:length(p)) {
+  p[[i]] <- p[[i]] + NoLegend()+
+  stat_summary(fun= median, geom='point', size = 20, colour = "black", shape = 95) +
+    stat_compare_means(label = "p.signif", method = "wilcox.test", ref.group = "Healthy",aes(label=..p.adj..)) +
+  theme (axis.text.x = element_text(size=10, face="bold", colour = "black",angle = 0, hjust = 0.1),axis.text.y = element_text(size=12, face="bold", colour = "black",angle = 0),legend.text = element_text(face = "bold", size = 10)) }
+g=cowplot::plot_grid(plotlist = p, ncol = 3)
+##
+ggsave(filename=paste0("PDC_VLNPLOT_FUNCTION_GENES_",Sys.Date(),".png"), plot=g, device="png",
+       path= path, height=9, width=9, units="in", dpi=500)
+```
+
+```{r}
+library("Nebulosa")
+p=plot_density(pDC, c("TLR9",  "DHX36","IFNAR1","IFNAR2"), pal = "magma", combine = F, joint = F) 
+for(i in 1:length(p)) {
+  p[[i]] <- p[[i]] +theme (axis.text.x = element_text(size=10, face="bold", colour = "black",angle = 0),axis.text.y = element_text(size=12, face="bold", colour = "black",angle = 0),legend.text = element_text(face = "bold", size = 10)) }
+g=cowplot::plot_grid(plotlist = p, ncol = 2)
+
+ggsave(filename=paste0("PDC_SENSORS_improved_Nebulosa_",Sys.Date(),".png"), plot=cowplot::plot_grid(plotlist = p, ncol = 2), device="png",path=path, height=9, width=9, units="in", dpi=500)
+```
+
+
+PATHWAY ENRICHMENT ANALYSIS ON pDC:
+
+```{r}
+library(pathfindR)
+library(tidyverse)
+library(clusterProfiler)
+library(msigdbr)
+
+DefaultAssay(pDC)= "RNA"
+Idents(pDC)="severity"
+levels(pDC) <- c("Healthy", "Moderate", "Severe")
+
+ms= FindMarkers(pDC, ident.1 = "Severe", ident.2 = "Moderate", only.pos = T,logfc.threshold = 0.25, min.pct = 0.1) %>% filter(.,p_val_adj<0.05 ) %>% .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),]
+write.csv(ms,paste0(path,  "UP_pDC_SeverevsModerate_LOG0.5.csv"))
+
+pathgenes_ms= ms[,c(2,5)] %>% rownames_to_column(., var="Gene_Symbol")
+
+pathoutput_sm= run_pathfindR(pathgenes_ms, gaThread= 6, gene_sets = c( "GO-All"), visualize_enriched_terms=F,  silent_option = TRUE, output_dir = "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/INTEGRATED_ALL/pathfindR_Results_pDC_UP_SeverevsModerate")
+
+#write.csv(pathoutput_sm, "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/INTEGRATED_ALL/UP_pDC_SEVEREvsMODERATE.csv")
+###
+pathoutput_sm=pathoutput_sm[order(pathoutput_sm$Fold_Enrichment, decreasing = T),]
+pathoutput_sm=pathoutput_sm[1:30,]
+
+p=pathfindR::enrichment_chart(pathoutput_sm , top_terms = 15, num_bubbles=5) +theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )+ scale_color_viridis(option="D") 
+p= deg1(ms, "High_Severe vs Moderate pDC", "#E6AB02")
+ ggsave(filename=paste0("ENRICHMENT_UP_pDC_SEVERE_vsMODERATE_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=5, width=10, units="in", dpi=500)
+####################
+```
+
+```{r}
+ sm= FindMarkers(pDC, ident.2 = "Severe", ident.1 = "Moderate", only.pos = T,logfc.threshold = 0.25 ) %>% filter(.,p_val_adj<0.05 ) %>% .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),]
+write.csv(sm,paste0(path, "UP_pDC_ModeratevsSevere_LOG0.5.csv"))
+
+p= deg1(sm, "High_Moderate vs Severe pDC", "#AD4C9E")
+ggsave(filename=paste0("pDC_UP_MODERATEvsSEVERE_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=7, width=10, units="in", dpi=500)
+
+```
+
+```{r}
+hs= FindMarkers(pDC, ident.1 = c("Severe"  ), ident.2 = "Healthy", only.pos = T, logfc.threshold = 0.25) %>% filter(.,p_val_adj<0.05 ) %>% .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),] 
+p=deg1(hs, "High_pDC_SeverevsHD", "grey")
+##
+ggsave(filename=paste0("pDC_UP_SEVERE_vsHD_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=7, width=10, units="in", dpi=500)
+#######
+pathgenes_hs= hs[,c(2,5)] %>% rownames_to_column(., var="Gene_Symbol")
+pathoutput_hs= run_pathfindR(pathgenes_hs, gaThread= 10, gene_sets = c( "GO-All",  "Reactome"), visualize_enriched_terms=F,  silent_option = TRUE, output_dir = "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/INTEGRATED_ALL/pathfindR_Results_pDC_UP_SeverevsModerate")
+##
+pathoutput_hs=pathoutput_hs[order(pathoutput_hs$Fold_Enrichment, decreasing = T),]
+pathoutput_hs=pathoutput_hs[1:30,]
+
+p=pathfindR::enrichment_chart(pathoutput_hs , top_terms = 15, num_bubbles=5) +theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )+ scale_color_viridis(option="D") 
+##
+ggsave(filename=paste0("pDC_UP_COVIDvsHD_pDC_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=5, width=10, units="in", dpi=500)
+
+p= deg1(hs, "High_Severe vs HC pDC", "#E6AB02")
+ ggsave(filename=paste0("ENRICHMENT_UP_pDC_SEVERE_vsMODERATE_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=5, width=10, units="in", dpi=500)
+```
+
+
+MONOCYTES:
+ANTIVIRAL:
+
+focus on classical monocytes:
+```{r}
+DefaultAssay(rpmi)="RNA"
+Idents(rpmi)="celltype"
+classical= subset(rpmi, idents = "CD14+ Monocytes")
+DefaultAssay(classical)="SCT"
+classical=classical%>% FindVariableFeatures()%>% RunPCA( ) %>%  FindNeighbors(., dims = 1:30)  %>% FindClusters(., resolution = 0.8)  %>% RunUMAP(., dims = 1:30)
+```
+
+```{r}
+
+library(RColorBrewer)
+library(ggplot2)
+getPalette = colorRampPalette(brewer.pal(8, "Dark2"))
+p2=DimPlot(classical, group.by = "orig.ident", cols= getPalette(length(unique(classical$orig.ident))),label.size = 6, pt.size = 0.3) +theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+
+ggsave(filename=paste0("SUBCLUSTERED_EDTA_SCT_merged_classical_UMAP_Patient_",Sys.Date(),".png"), plot=p2, device="png",
+       path= path, height=5, width=5, units="in", dpi=500)
+
+#####
+getPalette = colorRampPalette(brewer.pal(6, "Dark2"))
+p3=DimPlot(classical, group.by = "severity", cols= getPalette(length(unique(classical$severity))), label.size = 6, pt.size = 0.3, label.color = "black", label.box = T) +theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+
+ggsave(filename=paste0("SUBCLUSTERED_EDTA_SCT_classical_UMAP_Severity_2_",Sys.Date(),".png"), plot=p3, device="png",path= path, height=5, width=5, units="in", dpi=500)
+```
+
+```{r}
+DefaultAssay(classical)="RNA"
+classical=NormalizeData(classical) %>% FindVariableFeatures() %>% RunICA()
+##
+p3=DimPlot(classical,reduction="ica",c(1,3), group.by = "severity", cols= getPalette(length(unique(classical$severity))), label.size = 6, pt.size = 0.5, label.color = "black", label.box = T) +theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+
+ggsave(filename=paste0("SUBCLUSTERED_EDTA_SCT_classical_ICA_Severity_",Sys.Date(),".png"), plot=p3, device="png",path= path, height=5, width=5, units="in", dpi=500)
+```
+
+```{r}
+
+classical = ScaleData(classical)
+p=DotPlot(classical, features=na.omit(Fn_sig_v2$Antiviral), dot.scale = 8, group.by = "severity") + scale_color_viridis(option="D")+ RotatedAxis() +
+  theme (axis.text.x = element_text(size=10, face="bold", colour = "black",angle = 90),axis.text.y = element_text(size=10, face="bold", colour = "black",angle = 0),legend.text = element_text(face = "bold", size = 10))  + ggtitle("Antiviral effector molecules")
+##
+ggsave(filename=paste0("CLASSICAL_DOTPLOT_ANTIVIRAL_",Sys.Date(),".png"), plot=p, device="png",path= path, height=5, width=10, units="in", dpi=500)
+##
+p=DotPlot(classical, features=na.omit(Fn_sig_v2$Antiviral), dot.scale = 8, group.by = "severity") + scale_color_viridis(option="D")+ RotatedAxis() +
+  theme (axis.text.x = element_text(size=10, face="bold", colour = "black",angle = 0),axis.text.y = element_text(size=10, face="bold", colour = "black",angle = 0),legend.text = element_text(face = "bold", size = 10)) + coord_flip() + ggtitle("Antiviral effector molecules")
+##
+ggsave(filename=paste0("CLASSICAL_DOTPLOT_ANTIVIRAL_FLIPPED_",Sys.Date(),".png"), plot=p, device="png",path= path, height=9, width=7, units="in", dpi=500)
+```
+
+#####
+```{r}
+rpmi$category=
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ISOLATE THE SAMPLES:
+```{r}
+Idents(rpmi)="orig.ident"
+tmp= subset(rpmi, idents = c("01_051","01_051_J10","CTRL_02020RPMI"))
+###♠
+DefaultAssay(tmp)="SCT"
+tmp=tmp%>% RunPCA( ) %>%  FindNeighbors(., dims = 1:30)  %>% FindClusters(., resolution = 0.8)  %>% RunUMAP(., dims = 1:30)
+
+library(RColorBrewer)
+
+getPalette = colorRampPalette(brewer.pal(6, "Set1"))
+p1=DimPlot(tmp, group.by = "celltype", cols= getPalette(length(unique(tmp$celltype))), label.size = 6, pt.size = 0.5, label.color = "black", label.box = T) +   theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+##
+ggsave(filename=paste0("SUBCLUSTERED_tmp_SCT_APC_UMAP_CELLTYPE_",Sys.Date(),".png"), plot=p1, device="png",
+       path= path, height=8, width=8, units="in", dpi=500)
+
+#######
+getPalette = colorRampPalette(brewer.pal(8, "Dark2"))
+p2=DimPlot(tmp, group.by = "orig.ident", cols= getPalette(length(unique(tmp$orig.ident))),label.size = 6, pt.size = 0.5)+   theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+
+ggsave(filename=paste0("SUBCLUSTERED_tmp_SCT_merged_APC_UMAP_Patient_",Sys.Date(),".png"), plot=p2, device="png",
+       path= path, height=8, width=8, units="in", dpi=500)
+
+#####
+getPalette = colorRampPalette(brewer.pal(6, "Dark2"))
+p3=DimPlot(tmp, group.by = "severity", cols= getPalette(length(unique(tmp$severity))), label.size = 6, pt.size = 0.5, label.color = "black", label.box = T) +   theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+
+ggsave(filename=paste0("SUBCLUSTERED_tmp_SCT_APC_UMAP_Severity_2_",Sys.Date(),".png"), plot=p3, device="png",
+       path= path, height=8, width=8, units="in", dpi=500)
+```
+
+```{r}
+Idents(tmp)="orig.ident"
+
+tmp$time= ifelse( tmp$orig.ident== "01_051", "D1", ifelse(tmp$orig.ident== "01_051_J10", "D10", "HD"))
+
+Idents(tmp)="time"
+getPalette = colorRampPalette(brewer.pal(3, "Dark2"))
+p3=DimPlot(tmp, group.by = "time", cols= getPalette(length(unique(tmp$time))), label.size = 6, pt.size = 0.5, label.color = "black", label.box = T) +   theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+
+ggsave(filename=paste0("SUBCLUSTERED_tmp_SCT_APC_UMAP_TIME_2_",Sys.Date(),".png"), plot=p3, device="png",
+       path= path, height=8, width=8, units="in", dpi=500)
+```
+
+```{r}
+Idents(tmp)="celltype"
+c14= subset(tmp, idents = "CD14+ Monocytes")
+
+DefaultAssay(pDC)="SCT"
+c14=c14%>% RunPCA( ) %>%  FindNeighbors(., dims = 1:30)  %>% FindClusters(., resolution = 0.8)  %>% RunUMAP(., dims = 1:30)
+```
+
+```{r}
+Idents(c14)="time"
+ cols= getPalette(length(unique(c14$time)))
+mpDC=FindAllMarkers(c14, only.pos = TRUE, logfc.threshold = 0.25, min.pct = 0.1) %>% filter(.,p_val_adj<0.05 ) %>% .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),] 
+
+top10 <-mpDC %>% group_by(cluster) %>% top_n(n = 10, wt = avg_logFC)
+
+```
+
+```{r}
+Idents(c14)="severity"
+levels(c14) <- c("Healthy", "Moderate", "Severe")
+
+cols= getPalette(length(unique(c14$severity)))
+avge=AverageExpression(object = c14, features = top10$gene, assay="RNA", return.seurat = T)
+levels(avge)= c("Healthy", "Moderate", "Severe")
+
+plot <- DoHeatmap(avge, group.colors=cols, features = rownames(avge),  assay = "RNA", slot= "scale.data", combine = T,draw.lines=F, hjust=0.1, angle = 0) + scale_fill_gradientn(colors = rev(RColorBrewer::brewer.pal(n = 10, name = "RdBu"))) +
+  theme (axis.text.x = element_text(size=12, face="bold", colour = "black",angle = 0),axis.text.y = element_text(size=12, face="bold", colour = "black",angle = 0))
+####
+ggsave(filename=paste0("HEATMAP_AVG_Expression_CLASSICALMONOCYTES_DAY_",Sys.Date(),".png"), plot=plot, device="png",
+       path= path, height=12, width=6, units="in", dpi=500)
+
+```
+
+
+
+```{r}
+Idents(tmp)="celltype"
+cdc= subset(tmp, idents = "CD1c+ DC")
+
+DefaultAssay(cdc)="SCT"
+cdc=cdc%>% RunPCA( ) %>%  FindNeighbors(., dims = 1:30)  %>% FindClusters(., resolution = 0.8)  %>% RunUMAP(., dims = 1:30)
+####
+Idents(cdc)="severity"
+mpDC=FindAllMarkers(cdc, only.pos = TRUE, logfc.threshold = 0.25, min.pct = 0.1) %>% filter(.,p_val_adj<0.05 ) %>% .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),] 
+
+top10 <-mpDC %>% group_by(cluster) %>% top_n(n = 10, wt = avg_logFC)
+###############################
+cols= getPalette(length(unique(cdc$severity)))
+avge=AverageExpression(object = cdc, features = top10$gene, assay="RNA", return.seurat = T)
+levels(avge)= c("Healthy", "Moderate", "Severe")
+
+plot <- DoHeatmap(avge, group.colors=cols, features = rownames(avge),  assay = "RNA", slot= "scale.data", combine = T,draw.lines=F, hjust=0.1, angle = 0) + scale_fill_gradientn(colors = rev(RColorBrewer::brewer.pal(n = 10, name = "RdBu"))) +
+  theme (axis.text.x = element_text(size=12, face="bold", colour = "black",angle = 0),axis.text.y = element_text(size=12, face="bold", colour = "black",angle = 0))
+####
+ggsave(filename=paste0("HEATMAP_AVG_Expression_CD1CDC_DAY_",Sys.Date(),".png"), plot=plot, device="png",
+       path= path, height=12, width=6, units="in", dpi=500)
+```
+
+```{r}
+apo= list(c("CLU" ,  "EGR3" , "EREG" , "IL1B" , "SOD2" , "MCL1" , "HMGB2", "SAT1" , "DAP"  ))
+```
+
+```{r}
+Idents(tmp)="celltype"
+pdc= subset(tmp, idents = "pDC")
+
+DefaultAssay(pdc)="SCT"
+pdc=pdc %>% RunPCA( ) %>%  FindNeighbors(., dims = 1:30)  %>% FindClusters(., resolution = 0.8)  %>% RunUMAP(., dims = 1:30)
+####
+Idents(pdc)="severity"
+mpDC=FindAllMarkers(pdc, only.pos = TRUE, logfc.threshold = 0.25, min.pct = 0.1) %>% filter(.,p_val_adj<0.05 ) %>% .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),] 
+
+top10 <-mpDC %>% group_by(cluster) %>% top_n(n = 10, wt = avg_logFC)
+###############################
+cols= getPalette(length(unique(pdc$severity)))
+avge=AverageExpression(object = pdc, features = top10$gene, assay="RNA", return.seurat = T)
+levels(avge)= c("Healthy", "Moderate", "Severe")
+
+plot <- DoHeatmap(avge, group.colors=cols, features = rownames(avge),  assay = "RNA", slot= "scale.data", combine = T,draw.lines=F, hjust=0.1, angle = 0) + scale_fill_gradientn(colors = rev(RColorBrewer::brewer.pal(n = 10, name = "RdBu"))) +
+  theme (axis.text.x = element_text(size=12, face="bold", colour = "black",angle = 0),axis.text.y = element_text(size=12, face="bold", colour = "black",angle = 0))
+####
+ggsave(filename=paste0("HEATMAP_AVG_Expression_CD1CDC_DAY_",Sys.Date(),".png"), plot=plot, device="png",
+       path= path, height=12, width=6, units="in", dpi=500)
+```
+
