@@ -1,0 +1,378 @@
+---
+title: "MONOCYTES_EDTA_ANALYSIS"
+author: "Melissa"
+date: "05/12/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+MONOCYTES:
+```{r}
+library(dplyr)
+Idents(edta)="celltype"
+mono= subset(edta, idents = c("CD14+ Monocytes","CD16+ Monocytes"))
+
+DefaultAssay(mono)="SCT"
+mono=mono%>% FindVariableFeatures()%>% RunPCA( ) %>%  FindNeighbors(., dims = 1:30)  %>% FindClusters(., resolution = 0.8)  %>% RunUMAP(., dims = 1:30)
+```
+
+```{r}
+path="C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/INTEGRATED_ALL/FIGURE_5"
+library(RColorBrewer)
+library(ggplot2)
+getPalette = colorRampPalette(brewer.pal(8, "Dark2"))
+p2=DimPlot(mono, group.by = "orig.ident", cols= getPalette(length(unique(mono$orig.ident))),label.size = 6, pt.size = 0.5) +theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+
+ggsave(filename=paste0("SUBCLUSTERED_EDTA_SCT_merged_mono_UMAP_Patient_",Sys.Date(),".png"), plot=p2, device="png",
+       path= path, height=5, width=5, units="in", dpi=500)
+
+#####
+getPalette = colorRampPalette(brewer.pal(6, "Dark2"))
+p3=DimPlot(mono, group.by = "severity", cols= getPalette(length(unique(mono$severity))), label.size = 6, pt.size = 0.5, label.color = "black", label.box = T) +theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+
+ggsave(filename=paste0("SUBCLUSTERED_EDTA_SCT_mono_UMAP_Severity_2_",Sys.Date(),".png"), plot=p3, device="png",path= path, height=5, width=5, units="in", dpi=500)
+###
+
+getPalette = colorRampPalette(brewer.pal(6, "Set2"))
+p4=DimPlot(mono, group.by = "celltype", cols= getPalette(length(unique(mono$celltype))), label.size = 6, pt.size = 0.5, label.color = "black", label.box = T) +theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+
+ggsave(filename=paste0("SUBCLUSTERED_EDTA_SCT_mono_UMAP_subtype_",Sys.Date(),".png"), plot=p4, device="png",path= path, height=5, width=5, units="in", dpi=500)
+```
+
+focus on classical monocytes:
+```{r}
+DefaultAssay(edta)="RNA"
+Idents(edta)="celltype"
+classical= subset(edta, idents = "CD14+ Monocytes")
+DefaultAssay(classical)="SCT"
+classical=classical%>% FindVariableFeatures()%>% RunPCA( ) %>%  FindNeighbors(., dims = 1:30)  %>% FindClusters(., resolution = 0.8)  %>% RunUMAP(., dims = 1:30)
+```
+
+```{r}
+path="C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/INTEGRATED_ALL/FIGURE_5"
+library(RColorBrewer)
+library(ggplot2)
+getPalette = colorRampPalette(brewer.pal(8, "Dark2"))
+p2=DimPlot(classical, group.by = "orig.ident", cols= getPalette(length(unique(classical$orig.ident))),label.size = 6, pt.size = 0.3) +theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+
+ggsave(filename=paste0("SUBCLUSTERED_EDTA_SCT_merged_classical_UMAP_Patient_",Sys.Date(),".png"), plot=p2, device="png",
+       path= path, height=5, width=5, units="in", dpi=500)
+
+#####
+getPalette = colorRampPalette(brewer.pal(6, "Dark2"))
+p3=DimPlot(classical, group.by = "severity", cols= getPalette(length(unique(classical$severity))), label.size = 6, pt.size = 0.3, label.color = "black", label.box = T) +theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+
+ggsave(filename=paste0("SUBCLUSTERED_EDTA_SCT_classical_UMAP_Severity_2_",Sys.Date(),".png"), plot=p3, device="png",path= path, height=5, width=5, units="in", dpi=500)
+```
+
+```{r}
+DefaultAssay(classical)="RNA"
+classical=NormalizeData(classical) %>% ScaleData() %>% FindVariableFeatures() %>% RunICA()
+##
+p3=DimPlot(classical,reduction="ica",c(1,2), group.by = "severity", cols= getPalette(length(unique(classical$severity))), label.size = 6, pt.size = 0.5, label.color = "black", label.box = T) +theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+
+ggsave(filename=paste0("SUBCLUSTERED_EDTA_SCT_classical_ICA_Severity_",Sys.Date(),".png"), plot=p3, device="png",path= path, height=5, width=5, units="in", dpi=500)
+```
+
+```{r}
+Idents(classical)= "orig.ident"
+classical$category= paste0(classical$orig.ident, "_", classical$severity)
+classical= SubsetData(classical, ident.remove = "CTRL_06_01_EDTA")
+
+Idents(classical)="category"
+ levels(classical)= c("CTRL_02021_Healthy", "CTRL_02022_Healthy","01_052_Moderate" ,"05_01_J1_Moderate" , "05_01_J4_Moderate","05_02_Moderate", "01_049_Severe","01_054_J0_Severe","01_040_J2_Severe" ,"03_001_J1_Severe", "03_01_J5_Severe","P037_J0_Severe"   ,  "P037_J4_Severe"  )
+```
+
+```{r}
+saveRDS(classical, "/Volumes/Melissa/Analysis_COVID_COMBINED/INTEGRATED_ALL/EDTA_CLASSICAL_MONOCYTES.Rds")
+classical= readRDS("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/INTEGRATED_ALL/EDTA_CLASSICAL_MONOCYTES.Rds")
+```
+
+```{r}
+ProjectDim(classical, reduction = "ica", dims.print = c(1,3), nfeatures.print = 30)
+```
+
+```{r}
+ic1= c( "NR4A1", "EGR2", "IL1B", "SEPT9", "ATF3", "PTGS2", "FOSB", "SEPT2", "EGR3", "TPT1" , "FAM45A", "MINOS1", "COL4A3BP", "PMAIP1", "AES", "CD83", "NR4A2", "EGR1", "RGS2", "PTP4A1" , "MCL1", "FAM208A", "SEPT7", "BTG2", "POLR2J3.1", "RPL9", "ALDH1A1", "KLF4", "C8orf59", "TMSB4X" ,"RNASEK", "GABARAP", "IFI30", "RPS26", "RPL17", "TRAPPC5", "NME2", "ATP6V0C", "EEF1G", "SNHG29" , "MICOS10", "IGKC", "TOMM6",  "MALAT1", "CRIP1", "SEPTIN7", "RPL36A", "RBIS", "MIF" , "SNHG5", "RPS17", "SERF2", "IGLC2", "DENND10", "SNHG6", "SCO2", "MICOS13", "NDUFA13")
+#######
+res.hp <- enricher(ic1, TERM2GENE=m_t2g)@result %>% filter(., p.adjust< 0.05)
+res.hp$p.adjust=-log10(res.hp$p.adjust)
+
+ p= ggplot(res.hp, aes(y = p.adjust, x= ID))+
+  geom_bar(stat = "identity", width=0.3)+ scale_fill_manual(values=c("#B4A90C"))+theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold")) +
+  theme_classic()  + coord_flip()
+```
+
+
+```{r}
+ic3= c("FOS", "RNASEK", "IFI30", "RPLP1", "GABARAP", "RPL17", "RPL36A", "ATP6V0C", "EEF1G", "JUN" ,"NME2", "TRAPPC5", "SNHG29", "RPS17",  "JUNB", "TOMM6", "MICOS10","SEPTIN7",  "SNHG5", "RBIS", "RPL39", "HLA-DRB5", "RPS8", "MIF", "ZFP36L2", "IER2", "GIMAP7", "PHLDA1", "MAFB", "THBD", "RGCC",  "ZBTB43",  "TNFSF14", "B3GNT5", "BCL2A1" ,"NRIP3", "SERTAD1", "CCR1", "DUSP6", "CSRNP1", "SGK1",  "FOSL1", "RASGEF1B", "TRIB1", "SPRY2", "SLC11A1", "FTH1", "GLUL", "PLAUR", "CLEC4E", "CCDC71L", "HBEGF", "MINOS1", "C3orf58" )
+##
+res.hp <- enricher(ic3, TERM2GENE=m_t2g)@result %>% filter(., p.adjust< 0.05)
+res.hp$p.adjust=-log10(res.hp$p.adjust)
+
+ p= ggplot(res.hp, aes(y = p.adjust, x= ID))+
+  geom_bar(stat = "identity", width=0.3)+ scale_fill_manual(values=c("#B4A90C"))+theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold")) +
+  theme_classic()  + coord_flip()
+```
+
+==> both methods give the same results:
+
+```{r}
+icgenes= c("NR4A1", "EGR2", "IL1B", "SEPT9", "ATF3", "PTGS2", "FOSB", "SEPT2", "EGR3", "TPT1" , "FAM45A", "MINOS1", "COL4A3BP", "PMAIP1", "AES", "CD83", "NR4A2", "EGR1", "RGS2", "PTP4A1" , "MCL1", "FAM208A", "SEPT7", "BTG2", "POLR2J3.1", "RPL9", "ALDH1A1", "KLF4",  "TMSB4X" ,"GABARAP", "IFI30", "RPS26", "RPL17", "NME2", "EEF1G", "SNHG29", "MICOS10",  "TOMM6" ,"CRIP1", "SEPTIN7", "RPL36A", "RBIS", "MIF", "SNHG5",  "DENND10", "SNHG6", "SCO2", "CST3", "MRPS24",  "TLE5",  "CLU","FOS", "IFI30", "GABARAP", "RPL17", "RPL36A", "EEF1G", "JUN", "NME2", "SNHG29", "RPS17" , "JUNB", "SEPTIN7", "SNHG5", "RBIS", "HLA-DRB5", "MIF" ,"ZFP36L2", "IER2",  "SCO2",  "DENND10", "SNHG6", "MRPS24",  "RESF1" ,"PHLDA1", "MAFB", "THBD", "RGCC",  "ZBTB43",  "TNFSF14", "B3GNT5", "BCL2A1" , "NRIP3", "SERTAD1", "CCR1", "DUSP6", "CSRNP1", "SGK1",  "FOSL1", "RASGEF1B", "TRIB1" ,
+ "SLC11A1", "GLUL", "PLAUR", "CLEC4E", "CCDC71L", "HBEGF", "MINOS1",  "PPIF") %>% unique()
+```
+
+```{r}
+res.hp <- enricher(icgenes, TERM2GENE=m_t2g)@result %>% filter(., p.adjust< 0.05)
+res.hp$p.adjust=-log10(res.hp$p.adjust)
+
+ p= ggplot(res.hp, aes(y = p.adjust, x= ID))+
+  geom_bar(stat = "identity", width=0.3)+ scale_fill_manual(values=c("#B4A90C"))+theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold")) +
+  theme_classic()  + coord_flip()
+
+```
+
+```{r}
+tnfa=strsplit(res.hp[which(res.hp$ID=="HALLMARK_TNFA_SIGNALING_VIA_NFKB"),8], split = "/")
+apop= strsplit(res.hp[which(res.hp$ID== "HALLMARK_APOPTOSIS"),8], split = "/")
+p53= strsplit(res.hp[which(res.hp$ID=="HALLMARK_P53_PATHWAY"),8], split = "/")
+kras=strsplit(res.hp[which(res.hp$ID== "HALLMARK_KRAS_SIGNALING_UP"),8], split = "/")
+#####################################################################################################
+classical=AddModuleScore(classical, features = apop, name="APOPTOSIS", ctrl = 100, nbin = 50)
+classical=AddModuleScore(classical, features = p53, name="P53_PATHWAY", ctrl = 100, nbin = 50)
+classical=AddModuleScore(classical, features = tnfa, name="TNFA_SIGNALING_VIA_NFKB", ctrl = 100, nbin = 50)
+classical=AddModuleScore(classical, features = kras, name="KRAS_SIGNALING_UP", ctrl = 100, nbin = 50)
+```
+
+```{r}
+library(ggpubr)
+Idents(classical)="severity"
+levels(classical)= c("Healthy", "Moderate", "Severe")
+p <-VlnPlot(classical, c("APOPTOSIS1","TNFA_SIGNALING_VIA_NFKB1","P53_PATHWAY1","KRAS_SIGNALING_UP1"), cols =cols, pt.size = 0, combine = F )
+for(i in 1:length(p)) {
+  p[[i]] <- p[[i]] + NoLegend()+
+  stat_summary(fun= median, geom='point', size = 20, colour = "black", shape = 95) +
+   stat_compare_means(label = "p.signif", method = "wilcox.test", ref.group = "Healthy") +
+  theme (axis.text.x = element_text(size=10, face="bold", colour = "black",angle = 0),axis.text.y = element_text(size=10, face="bold", colour = "black",angle = 0),legend.text = element_text(face = "bold", size = 10)) }
+g=cowplot::plot_grid(plotlist = p, ncol = 2)
+
+ ggsave(filename=paste0("PATHWAYS_UP_MONOCYTES_ICA_Severity_",Sys.Date(),".png"), plot=g, device="png",path= path, height=6, width=8, units="in", dpi=500)
+```
+
+ANTIVIRAL:
+```{r}
+p=DotPlot(classical, features=na.omit(Fn_sig_v2$Antiviral), dot.scale = 8, group.by = "severity") + scale_color_viridis(option="D")+ RotatedAxis() +
+  theme (axis.text.x = element_text(size=10, face="bold", colour = "black",angle = 90),axis.text.y = element_text(size=10, face="bold", colour = "black",angle = 0),legend.text = element_text(face = "bold", size = 10))  + ggtitle("Antiviral effector molecules")
+##
+ggsave(filename=paste0("CLASSICAL_DOTPLOT_ANTIVIRAL_",Sys.Date(),".png"), plot=p, device="png",path= path, height=5, width=10, units="in", dpi=500)
+##
+p=DotPlot(classical, features=na.omit(Fn_sig_v2$Antiviral), dot.scale = 8, group.by = "severity") + scale_color_viridis(option="D")+ RotatedAxis() +
+  theme (axis.text.x = element_text(size=10, face="bold", colour = "black",angle = 0, hjust = 0.1),axis.text.y = element_text(size=10, face="bold", colour = "black",angle = 0),legend.text = element_text(face = "bold", size = 10)) + coord_flip() + ggtitle("Antiviral effector molecules")
+##
+ggsave(filename=paste0("CLASSICAL_DOTPLOT_ANTIVIRAL_FLIPPED_",Sys.Date(),".png"), plot=p, device="png",path= path, height=7, width=7, units="in", dpi=500)
+```
+
+COMPARE MODERATE VS SEVERE MONOCYTES:
+```{r}
+Idents(classical)="severity"
+library(dplyr)
+markers <- FindMarkers(classical, ident.1 = "Severe", ident.2 = "Moderate", only.pos = TRUE, logfc.threshold = 0.25) %>% filter(., p_val_adj<0.05) %>%  .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),] 
+pathgenes_ms= markers[,c(2,5)] %>% rownames_to_column(., var="Gene_Symbol")
+
+pathoutput_sm= run_pathfindR(pathgenes_ms, gaThread= 9, gene_sets = c("KEGG"), visualize_enriched_terms=F,  silent_option = TRUE, output_dir = "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/INTEGRATED_ALL/pathfindR_Results_CLASSICALMONO_SEVEREvsMODERATE")
+#####
+p=pathfindR::enrichment_chart(pathoutput_sm , top_terms = 15, num_bubbles=5) +theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )+ scale_color_viridis(option="D")
+ggsave(filename=paste0("NONCLASSICAL_EDTA_DEG_COVIDvsHD_",Sys.Date(),".png"), plot=p, device="png",path= path, height=10, width=10, units="in", dpi=500)
+####
+pathoutput_sm=pathoutput_sm[order(pathoutput_sm$Fold_Enrichment, decreasing = T),]
+pathoutput_sm=pathoutput_sm[1:30,]
+
+p=pathfindR::enrichment_chart(pathoutput_sm[1:11,] , top_terms = 15, num_bubbles=5) +theme (axis.text.x = element_text(size=14, face="bold", colour = "black"),axis.text.y = element_text(size=14, face="bold", colour = "black"),legend.text = element_text(face = "bold") )+ scale_color_viridis(option="D") 
+
+ ggsave(filename=paste0("CLASSICAL_EDTA_HIGH_SEVEREvsMODERATE_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=10, width=10, units="in", dpi=500)
+```
+#######
+REMOVE THE HEALTHY AND CHECK THE ANTIVIRAL PROGRAM:
+```{r}
+
+Idents(classical)="category"
+levels(classical)= c("CTRL_02021_Healthy", "CTRL_02022_Healthy","01_052_Moderate" ,"05_01_J1_Moderate" , "05_01_J4_Moderate","05_02_Moderate", "01_049_Severe","01_054_J0_Severe","03_001_J1_Severe", "03_01_J5_Severe","P037_J0_Severe"   ,  "P037_J4_Severe"  )
+ 
+getPalette = colorRampPalette(brewer.pal(12, "Paired"))
+cols= getPalette(length(unique(classical$category)))
+
+#################################################################
+
+p=DotPlot(classical, features=na.omit(Fn_sig_v2$Antiviral), dot.scale = 8) + scale_color_viridis(option="D")+ RotatedAxis() +
+  theme (axis.text.x = element_text(size=10, face="bold", colour = "black",angle = 90),axis.text.y = element_text(size=10, face="bold", colour = "black",angle = 0),legend.text = element_text(face = "bold", size = 10))  + ggtitle("Antiviral effector molecules in CD14+ Monocytes (Discovery Set") + coord_flip()
+##
+ ggsave(filename=paste0("CLASSICAL_EDTA_PATIENTLEVEL_DOTPLOT_ANTIVIRAL_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=7, width=10, units="in", dpi=500)
+ 
+
+p= VlnPlot(classical, features="P53_PATHWAY1",  cols=cols)+
+  theme (axis.text.x = element_text(size=10, face="bold", colour = "black",angle = 90, hjust = 0.1),axis.text.y = element_text(size=12, face="bold", colour = "black",angle = 0),legend.text = element_text(face = "bold", size = 4)) +NoLegend()+
+  stat_summary(fun= median, geom='point', size = 15, colour = "red", shape = 95) 
+```
+```{r}
+Idents(classical)="orig.ident"
+classical=SubsetData(classical, ident.remove = c("01_040_J2" ))
+fem= WhichCells(classical, expression= XIST > 0.1)
+classical$gender= ifelse(colnames(classical) %in% fem, "Female", "Male")
+Idents(classical)="severity"
+library(dplyr)
+markers <- FindAllMarkers(classical, only.pos = TRUE, logfc.threshold = 0.25, test.use = "LR", latent.vars = "gender") %>% filter(., p_val_adj<0.05) %>% .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),] 
+top10 <-markers %>% group_by(cluster) %>% top_n(n = 20, wt = avg_logFC)
+```
+
+```{r}
+DefaultAssay(classical)="RNA"
+hs= FindMarkers(classical, ident.1 = c("Severe" ), ident.2 = "Healthy", only.pos = T, logfc.threshold = 0.25,test.use = "LR", latent.vars = "gender") 
+ hs$gene = rownames(hs)
+hs=hs%>% filter(.,p_val_adj<0.05 )
+rownames(hs)= hs$gene
+hs= hs %>% .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),] 
+
+sm= FindMarkers(classical, ident.2 = "Severe", ident.1 = "Moderate", only.pos = T,logfc.threshold = 0.25,test.use = "LR", latent.vars = "gender") 
+sm$gene=rownames(sm)
+sm= sm %>% filter(.,p_val_adj<0.05 ) 
+rownames(sm)=sm$gene
+
+ms= FindMarkers(classical, ident.1 = "Severe", ident.2 = "Moderate", only.pos = T,logfc.threshold = 0.25, test.use = "LR", latent.vars = "gender") 
+ms$gene=rownames(ms)
+ms= ms %>% filter(.,p_val_adj<0.05 ) 
+rownames(ms)= ms$gene
+ms = ms%>% .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),]
+```
+
+
+```{r}
+res.hp <- enricher(rownames(ms), TERM2GENE=m_t2g)@result %>% filter(.,p.adjust<0.05 )
+res.hp2 <- enricher(rownames(sm), TERM2GENE=m_t2g)@result %>% filter(.,p.adjust<0.05 )
+res.hp3 <- enricher(rownames(hs), TERM2GENE=m_t2g)@result %>% filter(.,p.adjust<0.05 )
+```
+
+```{r}
+res.hp2$ID= gsub("HALLMARK_", "", res.hp2$ID)
+res.hp3$ID= gsub("HALLMARK_", "", res.hp3$ID)
+```
+
+
+```{r}
+ifngresp=strsplit(res.hp2[which(res.hp2$ID== "INTERFERON_GAMMA_RESPONSE"),8], split = "/")
+ifnaresp=strsplit(res.hp2[which(res.hp2$ID== "INTERFERON_ALPHA_RESPONSE"),8], split = "/")
+
+###
+tnfa=strsplit(res.hp3[which(res.hp3$ID=="TNFA_SIGNALING_VIA_NFKB"),8], split = "/")
+comp=strsplit(res.hp3[which(res.hp3$ID=="COMPLEMENT"),8], split = "/")
+hypoxia= strsplit(res.hp3[which(res.hp3$ID== "HYPOXIA"),8], split = "/")
+kras= strsplit(res.hp3[which(res.hp3$ID== "KRAS_SIGNALING_UP"),8], split = "/")
+#####♥
+classical= AddModuleScore(classical, features = ifngresp, name="INTERFERON_G_RESPONSE", ctrl = 100, nbin = 50 )
+classical= AddModuleScore(classical, features = ifnaresp, name="INTERFERON_A_RESPONSE" , ctrl = 100, nbin = 50)
+classical= AddModuleScore(classical, features = comp, name="COMPLEMENT", ctrl = 100, nbin = 50 )
+classical= AddModuleScore(classical, features = hypoxia, name="HYPOXIA", ctrl = 100, nbin = 50 )
+
+classical= AddModuleScore(classical, features = tnfa, name="TNFA_SIGNALING_VIA_NFKB", ctrl = 100, nbin = 50 )
+classical= AddModuleScore(classical, features = kras, name="KRAS_SIGNALING_UP", ctrl = 100, nbin = 50 )
+```
+
+
+```{r}
+levels(classical)=c("Healthy", "Moderate", "Severe")
+p <-VlnPlot(classical, c("INTERFERON_G_RESPONSE1","COMPLEMENT1","INTERFERON_A_RESPONSE1","HYPOXIA1" ,"TNFA_SIGNALING_VIA_NFKB1","KRAS_SIGNALING_UP1"), cols =cols, pt.size = 0, combine = F )
+for(i in 1:length(p)) {
+  p[[i]] <- p[[i]] + NoLegend()+
+  stat_summary(fun= median, geom='point', size = 20, colour = "black", shape = 95) +
+   stat_compare_means(label = "p.signif", method = "wilcox.test", ref.group = "Healthy") +
+  theme (axis.text.x = element_text(size=10, face="bold", colour = "black",angle = 0),axis.text.y = element_text(size=10, face="bold", colour = "black",angle = 0),legend.text = element_text(face = "bold", size = 10)) }
+g=cowplot::plot_grid(plotlist = p, ncol = 2)
+
+path="C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/COVID_EDTA_12122020/FIGURE_MONOCYTES/"
+ ggsave(filename=paste0("PATHWAYS_UP_MONOCYTES_ICA_Severity_",Sys.Date(),".png"), plot=g, device="png",path= path, height=9, width=7, units="in", dpi=500)
+```
+
+
+
+#########################################################################################################
+NON CLASSICAL MONOCYTES:
+```{r}
+nonclas= readRDS("C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/INTEGRATED_ALL/EDTA_NON_CLASSICAL_MONOCYTES.Rds")
+```
+
+
+```{r}
+library(dplyr)
+Idents(edta)="celltype"
+nonclas= subset(edta, idents = c("CD16+ Monocytes")) %>% subset(., FCGR3A > 0.2)
+
+DefaultAssay(nonclas)="SCT"
+nonclas=nonclas%>% NormalizeData() %>% FindVariableFeatures()%>% RunPCA( ) %>%  FindNeighbors(., dims = 1:30)  %>% FindClusters(., resolution = 0.8)  %>% RunUMAP(., dims = 1:30)
+```
+
+```{r}
+library(RColorBrewer)
+library(ggplot2)
+getPalette = colorRampPalette(brewer.pal(8, "Dark2"))
+p2=DimPlot(nonclas, group.by = "orig.ident", cols= getPalette(length(unique(nonclas$orig.ident))),label.size = 6, pt.size = 0.5) +theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+##
+ggsave(filename=paste0("SUBCLUSTERED_EDTA_SCT_merged_nonclas_UMAP_Patient_",Sys.Date(),".png"), plot=p2, device="png",path= path, height=5, width=5, units="in", dpi=500)
+#####
+getPalette = colorRampPalette(brewer.pal(6, "Dark2"))
+p3=DimPlot(nonclas, group.by = "severity", cols= getPalette(length(unique(nonclas$severity))), label.size = 6, pt.size = 0.5, label.color = "black", label.box = T) +theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+
+ggsave(filename=paste0("SCT_nonclas_UMAP_Severity_",Sys.Date(),".png"), plot=p3, device="png",path= path, height=5, width=5, units="in", dpi=500)
+```
+
+```{r}
+nonclas=NormalizeData(nonclas) %>% FindVariableFeatures() %>% RunICA(., ndims.print = c(1:5))
+```
+```{r}
+fem= WhichCells(nonclas, expression= XIST > 0.1)
+nonclas$gender= ifelse(colnames(nonclas) %in% fem, "Female", "Male")
+Idents(nonclas)="severity"
+library(dplyr)
+markers <- FindAllMarkers(nonclas, only.pos = TRUE, logfc.threshold = 0.25, test.use = "LR", latent.vars = "gender") %>% filter(., p_val_adj<0.05) %>% .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),] 
+top10 <-markers %>% group_by(cluster) %>% top_n(n = 20, wt = avg_logFC) 
+##
+write.csv(markers, "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/INTEGRATED_ALL/NON_CLASSICAL_DEG.csv")
+```
+
+```{r}
+avge=AverageExpression(object = nonclas, features = unique(top10$gene), assay="RNA", return.seurat = T)
+levels(avge)= c("Healthy", "Moderate", "Severe")
+
+plot <- DoHeatmap(avge, group.colors=cols, features = rownames(avge),  assay = "RNA", slot= "scale.data", combine = T,draw.lines=F, hjust=F, angle = 0) + scale_fill_gradientn(colors = rev(RColorBrewer::brewer.pal(n = 10, name = "RdBu")))+ 
+  theme (axis.text.x = element_text(size=10, face="bold", colour = "black",angle = 0),axis.text.y = element_text(size=12, face="bold", colour = "black",angle = 0),legend.text = element_text(face = "bold", size = 6))
+###
+ggsave(filename=paste0("HEATMAP_DEG_NONCLASSICAL_",Sys.Date(),".png"), plot=plot, device="png",path= path, height=8, width=8, units="in", dpi=500)
+```
+
+```{r}
+saveRDS(nonclas,"C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/INTEGRATED_ALL/EDTA_NON_CLASSICAL_MONOCYTES_FINAL.Rds")
+```
+################################
+```{r}
+Idents(nonclas)="severity"
+library(dplyr)
+markers <- FindMarkers(nonclas, ident.1 = c("Moderate", "Severe"), ident.2 = "Healthy", only.pos = TRUE, logfc.threshold = 0.5) %>% filter(., p_val_adj<0.05) %>%  .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),] 
+pathgenes_ms= markers[,c(2,5)] %>% rownames_to_column(., var="Gene_Symbol")
+pathoutput_sm= run_pathfindR(pathgenes_ms, gaThread= 9, gene_sets = c("Reactome", "GO-All"), visualize_enriched_terms=F,  silent_option = TRUE, output_dir = "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/INTEGRATED_ALL/pathfindR_Results_NONCLASSICALMONO_COVIDvsHD")
+#####
+p=pathfindR::enrichment_chart(pathoutput_sm , top_terms = 15, num_bubbles=5) +theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )+ scale_color_viridis(option="D")
+ggsave(filename=paste0("NONCLASSICAL_EDTA_DEG_COVIDvsHD_",Sys.Date(),".png"), plot=p, device="png",path= path, height=10, width=10, units="in", dpi=500)
+####
+pathoutput_sm=pathoutput_sm[order(pathoutput_sm$Fold_Enrichment, decreasing = T),]
+pathoutput_sm=pathoutput_sm[1:30,]
+
+p=pathfindR::enrichment_chart(pathoutput_sm , top_terms = 15, num_bubbles=5) +theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )+ scale_color_viridis(option="D") 
+p= deg1(ms, "High_Severe vs Moderate classical", "#E6AB02")
+ ggsave(filename=paste0("NONCLASSICAL_EDTA_DEG_COVIDvsHD_BETTER_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=10, width=10, units="in", dpi=500)
+```
+
+
