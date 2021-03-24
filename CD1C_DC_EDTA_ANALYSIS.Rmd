@@ -1,0 +1,404 @@
+---
+title: "CD1C_EDTA_ANALYSIS"
+author: "MELISSA"
+date: "06/12/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+library(dorothea)
+library(viper)
+```
+
+
+
+MAIN FIGURE 5:DC:
+```{r}
+path="C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/COVID_EDTA_12122020/FIGURE_5/"
+
+library(dplyr)
+Idents(edta)="celltype"
+cDC= subset(edta, idents="CD1c+ DC") 
+##
+DefaultAssay(cDC)="SCT"
+cDC=cDC %>% FindVariableFeatures()%>% RunPCA( ) %>%  FindNeighbors(., dims = 1:30)  %>% FindClusters(., resolution = 0.8)  %>% RunUMAP(., dims = 1:30)
+```
+
+REMOVE THE YOUNG CONTROL
+```{r}
+Idents(cDC)="orig.ident"
+cDC= SubsetData(cDC, ident.remove ="CTRL_06_01_EDTA") 
+##
+DefaultAssay(cDC)="SCT"
+cDC=cDC %>% FindVariableFeatures()%>% RunPCA( ) %>%  FindNeighbors(., dims = 1:30)  %>% FindClusters(., resolution = 0.8)  %>% RunUMAP(., dims = 1:30)
+##
+fem= WhichCells( cDC, expression = XIST > 0.1)
+cDC$gender= ifelse(colnames(cDC) %in% fem, "Female", "Male")
+
+```
+
+```{r}
+getPalette = colorRampPalette(brewer.pal(8, "Dark2"))
+p2=DimPlot(cDC, group.by = "orig.ident", cols= getPalette(length(unique(cDC$orig.ident))),label.size = 6, pt.size = 0.8) +theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+
+ggsave(filename=paste0("SUBCLUSTERED_EDTA_SCT_merged_cDC_UMAP_Patient_",Sys.Date(),".png"), plot=p2, device="png",
+       path= path, height=5, width=5, units="in", dpi=500)
+
+#####
+getPalette = colorRampPalette(brewer.pal(13, "Dark2"))
+cols= getPalette(length(unique(cDC$severity)))
+p3=DimPlot(cDC, group.by = "severity", cols= getPalette(length(unique(cDC$severity))), label.size = 6, pt.size = 0.8, label.color = "black", label.box = T) +theme (axis.text.x = element_text(size=12, face="bold", colour = "black"),axis.text.y = element_text(size=10, face="bold", colour = "black"),legend.text = element_text(face = "bold") )
+
+ggsave(filename=paste0("SUBCLUSTERED_EDTA_SCT_cDC_UMAP_Severity_2_",Sys.Date(),".png"), plot=p3, device="png",
+       path= path, height=5, width=5, units="in", dpi=500)
+```
+
+
+```{r}
+DefaultAssay(cDC)="RNA"
+Idents(cDC)="severity"
+levels(cDC)=c("Healthy", "Moderate", "Severe")
+pm=FindAllMarkers(cDC, only.pos = TRUE , logfc.threshold = 0.25, test.use = "LR", latent.vars = "gender", min.pct = 0.1) %>% filter(., p_val_adj<0.05) %>%  .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),]  %>%  .[-which(rownames(.) %in% grep("^XIS", rownames(.), value = T)),]
+top10 <-pm %>% group_by(cluster) %>% top_n(n = 20, wt = avg_logFC)
+###
+cDC= ScaleData(cDC, features = rownames(cDC))
+plot <- DoHeatmap(cDC, group.colors=cols, features = top10$gene,  assay = "RNA", slot= "scale.data", combine = T,draw.lines=F, hjust=0.1, angle = 0) + scale_fill_gradientn(colors = rev(RColorBrewer::brewer.pal(n = 10, name = "RdBu")))+ 
+  theme (axis.text.y = element_text(size=12, face="bold", colour = "black",angle = 0),legend.text = element_text(face = "bold", size = 6))
+##
+ggsave(filename=paste0("EDTA_RNA_cDC_HEATMAP_DEG_TOP20_",Sys.Date(),".png"), plot=plot, device="png",
+       path= path, height=10, width=7, units="in", dpi=500)
+
+ggsave(filename=paste0("EDTA_SCT_cDC_HEATMAP_DEG_TOP20_2_",Sys.Date(),".png"), plot=plot, device="png",
+       path= path, width=10, height=7, units="in", dpi=500)
+```
+
+
+
+```{r}
+DefaultAssay(cDC)="RNA"
+p <-VlnPlot(cDC, features= grep("^HLA", rownames(pm), value = T)[-5], group.by = "severity", cols =cols, pt.size = 0, combine = F )
+for(i in 1:length(p)) {
+  p[[i]] <- p[[i]] + NoLegend()+
+  stat_summary(fun= median, geom='point', size = 3, colour = "black", shape = 95) +
+   stat_compare_means(label = "p.signif", method = "wilcox.test", ref.group = "Healthy",aes(label=..p.adj..)) +
+  theme (axis.text.x = element_text(size=9, face="bold", colour = "black",angle = 0, hjust = 0.1),axis.text.y = element_text(size=10, face="bold", colour = "black",angle = 0),legend.text = element_text(face = "bold", size = 4)) }
+g=cowplot::plot_grid(plotlist = p, ncol = 2)
+##
+ggsave(filename=paste0("EDTA_VLNPLOT_cDC_HLZ_II_",Sys.Date(),".png"), plot=g, device="png",
+       path= path, height=7, width=10, units="in", dpi=500)
+```
+
+CORRECTION OF THE FIGURE/ PER PATIENT LEVEL: ABOVE:
+
+```{r}
+Idents(cDC)="orig.ident"
+cDC=SubsetData(cDC, ident.remove = "01_040_J2")
+```
+
+```{r}
+#hla=grep("^HLA", rownames(cDC), value = T)[-c(2,3,14,15,18,21)] # scale_color_viridis(option="D") +
+hla= c("HLA-DPB1", "HLA-DMA" , "HLA-DQA2", "HLA-DRB5" ,"HLA-DRB1", "HLA-DQB1", "HLA-DMB" )
+Idents(cDC)="category"
+ levels(cDC)= c("CTRL_02021_Healthy", "CTRL_02022_Healthy","01_052_Moderate" ,"05_01_J1_Moderate" , "05_01_J4_Moderate","05_02_Moderate", "01_049_Severe","01_054_J0_Severe","03_001_J1_Severe", "03_01_J5_Severe","P037_J0_Severe"   ,  "P037_J4_Severe"  )
+ 
+p=DotPlot(cDC, features = hla, dot.scale = 8, ) +
+  theme (axis.text.x = element_text(size=14, face="bold", colour = "black",angle = 90),axis.text.y = element_text(size=14, face="bold", colour = "black",angle = 0)) 
+
+####
+ggsave(filename=paste0("HLAII_GENES_PATIENTS_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=7, width=11, units="in", dpi=500)
+```
+
+
+
+```{r}
+p <-VlnPlot(cDC, features= c("RFXANK",  "RFX1", "RFX3","CIITA"), group.by = "severity", cols =cols, pt.size = 0, combine = F )
+for(i in 1:length(p)) {
+  p[[i]] <- p[[i]] + NoLegend()+
+  stat_summary(fun= median, geom='point', size = 8, colour = "black", shape = 95) +
+  stat_compare_means(label = "p.signif", method = "wilcox.test", ref.group = "Healthy",aes(label=..p.adj..)) +
+  theme (axis.text.x = element_text(size=9, face="bold", colour = "black",angle = 0, hjust = 0.1),axis.text.y = element_text(size=10, face="bold", colour = "black",angle = 0),legend.text = element_text(face = "bold", size = 6)) }
+g=cowplot::plot_grid(plotlist = p, ncol = 2)
+##
+ggsave(filename=paste0("EDTA_VLNPLOT_cDC_RFX__",Sys.Date(),".png"), plot=g, device="png",
+       path= path, height=8, width=8, units="in", dpi=500)
+```
+
+ADD MODULE SCORES:
+```{r}
+hla= c("HLA-DPB1", "HLA-DMA" , "HLA-DQA2", "HLA-DRB5" ,"HLA-DRB1", "HLA-DQB1", "HLA-DMB" )
+hla=list(hla)
+reg=list(c("RFXANK",  "RFX1", "RFX3","CIITA"))
+##################
+cDC=AddModuleScore(cDC, features = hla, name="HLAII_2")
+cDC=AddModuleScore(cDC, features = reg, name="HLAII_Regulators", ctrl = 100, nbin = 50)
+#################
+
+p <-VlnPlot(cDC, features= c("HLAII_21","HLAII_Regulators1"), group.by = "severity", cols =cols, pt.size = 0, combine = F )
+for(i in 1:length(p)) {
+  p[[i]] <- p[[i]] + NoLegend()+
+  stat_summary(fun= median, geom='point', size = 3, colour = "black", shape = 95) +
+   stat_compare_means(label = "p.signif", method = "wilcox.test", ref.group = "Healthy",aes(label=..p.adj..)) +
+  theme (axis.text.x = element_text(size=9, face="bold", colour = "black",angle = 0, hjust = 0.1),axis.text.y = element_text(size=10, face="bold", colour = "black",angle = 0),legend.text = element_text(face = "bold", size = 4)) }
+g=cowplot::plot_grid(plotlist = p, ncol = 2)
+###
+ggsave(filename=paste0("cDC_VLNPLOT_HLA2_HLA2reg_",Sys.Date(),".png"), plot=g, device="png",
+       path= path, height=7, width=10, units="in", dpi=500)
+```
+
+```{r}
+getPalette = colorRampPalette(brewer.pal(12, "Paired"))
+cols= getPalette(length(unique(cDC$category)))
+
+           
+Idents(cDC)="category"
+ levels(cDC)= c("CTRL_02021_Healthy", "CTRL_02022_Healthy","01_052_Moderate" ,"05_01_J1_Moderate" , "05_01_J4_Moderate","05_02_Moderate", "01_049_Severe","01_054_J0_Severe","03_001_J1_Severe", "03_01_J5_Severe","P037_J0_Severe"   ,  "P037_J4_Severe"  )
+ ##
+p <-VlnPlot(cDC, features= c("HLAII_21"),  pt.size = 0, combine = T , cols = cols)+
+  theme (axis.text.x = element_text(size=12, face="bold", colour = "black",angle = 90, hjust = 0.1),axis.text.y = element_text(size=12, face="bold", colour = "black",angle = 0),legend.text = element_text(face = "bold", size = 4)) +NoLegend()+
+  stat_summary(fun= median, geom='point', size = 3, colour = "black", shape = 95) 
+#hla= list( grep("^HLA", rownames(pm), value = T)[-5])
+
+
+ggsave(filename=paste0("cDC_VLNPLOT_HLA2_CATEGORY_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=6, width=13, units="in", dpi=500)
+```
+
+
+
+Average expression of genes: NOT USE IT
+
+```{r}
+avge=AverageExpression(object = cDC, features = c("RFXANK",  "RFX1", "RFX3","CIITA", "HLA-DQB1", "HLA-DQA2", "HLA-C", "HLA-DRB5"), assay="RNA", return.seurat = T)
+levels(avge)= c("Healthy", "Moderate", "Severe")
+
+plot <- DoHeatmap(avge, group.colors=cols, features = rownames(avge),  assay = "RNA", slot= "scale.data", combine = T,draw.lines=F,  hjust = 0.1, angle = 0) + scale_fill_gradientn(colors = rev(RColorBrewer::brewer.pal(n = 10, name = "RdBu")))+ 
+  theme (axis.text.x = element_text(size=10, face="bold", colour = "black",angle = 0),axis.text.y = element_text(size=12, face="bold", colour = "black",angle = 0),legend.text = element_text(face = "bold", size = 6))
+###
+ggsave(filename=paste0("HEATMAP_DEG_NONCLASSICAL_",Sys.Date(),".png"), plot=plot, device="png",path= path, height=10, width=6, units="in", dpi=500)
+```
+Perform MSIGDB pathway enrichment:
+```{r}
+library(msigdbr)
+library(clusterProfiler)
+m_t2g <- msigdbr(species = "Homo sapiens", category = "C3")
+m_t2g =m_t2g %>% dplyr::select(gs_name, gene_symbol) %>% as.data.frame()
+m_t2g=m_t2g[-which(m_t2g$gs_name %in% grep("_MIR", m_t2g$gs_name, value = T)),]
+##
+markers=FindMarkers(cDC, only.pos = TRUE , logfc.threshold = 0.25, ident.1 = "Severe", ident.2 = "Moderate", test.use = "LR", latent.vars = "gender", min.pct = 0.1) %>% filter(., p_val_adj<0.05) %>%  .[-which(rownames(.) %in% grep("^IG", rownames(.), value = T)),]
+
+egmtp <- enricher(rownames(markers) , TERM2GENE=m_t2g)@result 
+res.hp=egmtp[which(egmtp$p.adjust< 0.05),]
+res.hp=res.hp[-which(res.hp$ID %in% grep("UNKNOWN", res.hp$ID, value = T)),]
+#
+res=res.hp[,c(1,6)]
+res$p.adjust=-log10(res$p.adjust)
+res=as.data.frame(res)
+res=res[order(res$p.adjust, decreasing = T),]
+res= res[which(res$ID %in% grep("TARGET", res$ID, value = T)),]
+res$ID= gsub("TARGET_GENES","TG",res$ID)
+p=ggplot(res[1:10,], aes(x= reorder(ID, p.adjust), y=p.adjust)) +
+    geom_segment( aes(xend=ID, yend=0)) +
+    geom_point( size=4, color="orange") +
+    coord_flip() +
+    theme_bw() +
+    xlab("TFtargets")+
+    ylab("-log10(adjustedPvalue")+ 
+  theme (axis.text.x = element_text(size=14, face="bold", colour = "black",angle = 0),axis.text.y = element_text(size=14, face="bold", colour = "black",angle = 0),legend.text = element_text(face = "bold", size = 6))
+##
+ggsave(filename="Lollipop_TFs_HIGH_SEVEREvsMODERATE_cDC.png", plot=p, device="png",
+       path= path, height=7, width=7, units="in", dpi=500)
+```
+
+```{r}
+saveRDS(cDC, "C:/Users/MakotoTeam/Documents/scRNAseq_Round3/Analysis_28Novembre/COVID_EDTA_12122020/EDTA_cDC1DC_final.Rds")
+```
+
+RUN DOROTHEA:
+```{r}
+DC=cDC
+run_dorothea(DC)
+```
+
+Infer TF activity
+```{r}
+library(viper)
+library(dorothea)
+library(tidyselect)
+library(tidyr)
+library(tidyverse)
+X=cDC
+dorothea_regulon_human <- get(data("dorothea_hs", package = "dorothea"))
+regulon <- dorothea_regulon_human %>%
+    dplyr::filter(confidence %in% c("A", "B"))
+#X:seurat object
+#run_dorothea=function(X){ 
+X <- run_viper(X, regulon,
+                  options = list(method = "scale", minsize = 4, 
+                                 eset.filter = FALSE, cores = 1, 
+                                 verbose = FALSE))
+DefaultAssay(object =X) <- "dorothea"
+X <- ScaleData(X)
+#X <- RunPCA(X, features = rownames(X), verbose = FALSE)
+#X <- FindNeighbors(X, dims = 1:20, verbose = FALSE)
+DefaultAssay(X)="dorothea"
+#X <- FindClusters(X, resolution = 1.0, verbose = FALSE)
+#X <- RunUMAP(X, dims = 1:10, umap.method = "uwot")
+#DimPlot(X, group.by = "fraction")
+#run differential expression based on TF activities:
+#run differential activity according to severity:
+Idents(X)="severity"
+tfa <- FindAllMarkers(X, only.pos = TRUE, min.pct = 0.25,logfc.threshold = 0.25, verbose = FALSE)
+tfa=tfa[which(tfa$p_val_adj <0.05),]
+top15 <-tfa %>% group_by(cluster) %>% top_n(n = 15, wt = avg_logFC)
+########Perform TF scoring:
+viper_scores_df <- GetAssayData(X, slot = "scale.data", 
+                                    assay = "dorothea")%>%  data.frame() %>% t()
+CellsClusters <- data.frame(cell = names(Idents(X)), 
+                           # cell_type = as.character(Idents(monocytes)),
+                            origin= as.character(X$"severity"),
+                            stringsAsFactors = FALSE)
+## We create a data frame with the Viper score per cell and its clusters
+viper_scores_clusters <- viper_scores_df  %>%
+  data.frame() %>% 
+  rownames_to_column("cell") %>%
+  gather(tf, activity, -cell) 
+viper_scores_clusters$cell= gsub("[.]", "-", viper_scores_clusters$cell)
+scores_clusters=viper_scores_clusters%>% inner_join(CellsClusters)
+
+## We summarize the Viper scores by cellpopulation  #cell_type,
+summarized_viper_scores <- scores_clusters %>% 
+  group_by(tf,  origin) %>%
+  summarise(avg = mean(activity),
+            std = sd(activity))
+
+## We select the 20 most variable TFs. (20*9 populations = 180)
+highly_variable_tfs <- summarized_viper_scores %>%
+  group_by(tf) %>%
+  mutate(var = var(avg))  %>%
+  ungroup() %>%
+  top_n(150, var) %>%
+  distinct(tf)
+## We prepare the data for the plot
+#summarized_viper_scores_df=summarized_viper_scores_df[c(1,3,4,2),]
+summarized_viper_scores_df <- summarized_viper_scores %>%
+  semi_join(highly_variable_tfs, by = "tf") %>%
+  dplyr::select(-std) %>%   
+  spread(tf, avg) %>%
+  data.frame(row.names = 1, check.names = FALSE, stringsAsFactors = FALSE)
+######
+palette_length = 100
+my_color = colorRampPalette(c("Darkblue", "white","red"))(palette_length)
+my_breaks <- c(seq(min(summarized_viper_scores_df), 0, 
+                   length.out=ceiling(palette_length/2) + 1),
+               seq(max(summarized_viper_scores_df)/palette_length, 
+                   max(summarized_viper_scores_df), 
+                   length.out=floor(palette_length/2)))
+htf= as.data.frame(t(summarized_viper_scores_df))
+viper_hmap <- pheatmap::pheatmap(htf,fontsize=14, 
+                       fontsize_row = 14, 
+                       color=my_color, breaks = my_breaks, 
+                       main = "DoRothEA_cDC", angle_col = 0,
+                       treeheight_col = 0,  border_color = NA, cluster_cols = F) 
+#return( viper_hmap)}
+
+ggsave(filename=paste0("HEATMAP_TF_cDC_DOROTHEA_",Sys.Date(),".png"), plot=viper_hmap, device="png",path=path, height=12, width=7, units="in", dpi=500)
+
+```
+
+try to run monocle:
+```{r}
+library(SeuratWrappers)
+library(monocle3)
+#install.packages("devtools")
+#devtools::install_github('cole-trapnell-lab/leidenbase')
+#BiocManager::install("batchelor")
+#devtools::install_github('cole-trapnell-lab/monocle3')
+```
+
+```{r}
+library(monocle3)
+DefaultAssay(cDC)="RNA"
+cds <- as.cell_data_set(cDC)
+cds <- cluster_cells(cds)
+
+p1 <- plot_cells(cds, show_trajectory_graph = F)
+p2 <- plot_cells(cds, color_cells_by = "partition", show_trajectory_graph = FALSE)
+wrap_plots(p1, p2)
+```
+
+```{r}
+integrated.sub <- subset(as.Seurat(cds), monocle3_partitions == 1)
+cds <- as.cell_data_set(integrated.sub)
+cds <- learn_graph(cds)
+p=plot_cells(cds, label_groups_by_cluster = FALSE, label_leaves = FALSE, label_branch_points = FALSE)
+
+ggsave(filename=paste0("LEARNT_GRAPH_MONOCLE_",Sys.Date(),".png"), plot=p, device="png",path=path, height=6, width=6, units="in", dpi=500)
+```
+
+Choose root from 6 to 2 :
+```{r}
+cds_sub <- choose_cells(cds)
+cds_sub=cds
+cds_res_3 <- graph_test(cds_sub, neighbor_graph="principal_graph", cores=6)
+cdr=cds_res_3
+cds_res_3= cdr
+
+cds_res_3= cds_res_3[-which(rownames(cds_res_3) %in% grep("^MT-", rownames(cds_res_3), value = T)),]
+cds_res_3=cds_res_3[which(cds_res_3$status=="OK"),]
+#Lcds_res_3=cds_res_3[which(cds_res_3$status=="OK"),]
+cds_res_3=cds_res_3[which(cds_res_3$q_value < 0.01),]
+##
+cds_res_3= cds_res_3[-which(rownames(cds_res_3) %in% grep("^IG", rownames(cds_res_3), value = T)),]
+
+#pr_deg_ids <- row.names(subset(cds_res, q_value < 0.0001))
+cds_res_3 =cds_res_3[order(cds_res_3$morans_test_statistic,decreasing = T),]
+write.csv(cds_res_3, paste0(path,"Monocle3_BranchFr1to2_topGenes.csv"))
+```
+
+```{r}
+
+cds <- order_cells(cds)
+p=plot_cells(cds, color_cells_by = "pseudotime", label_cell_groups = FALSE, label_leaves = FALSE, 
+    label_branch_points = FALSE)
+
+ggsave(filename=paste0("UMAP_PSEUDOTIME_",Sys.Date(),".png"), plot=p, device="png",path=path, height=6, width=6, units="in", dpi=500)
+```
+```{r}
+p=FeaturePlot(cDC, c("AREG", "HLA-DPA1","CD74","IFITM3" ,"B2M", "TMSB4X"))
+                     
+                    
+library("Nebulosa")
+p=plot_density(cDC, c("AREG", "HLA-DPA1","GABARAP" ,"IFITM3" ,"B2M", "TMSB4X"), pal = "magma") +
+theme (axis.text.x = element_text(size=10, face="bold", colour = "black",angle = 0),axis.text.y = element_text(size=12, face="bold", colour = "black",angle = 0),legend.text = element_text(face = "bold", size = 6))
+
+ggsave(filename=paste0("GENES_TOP_MONOCLE_",Sys.Date(),".png"), plot=p, device="png",path=path, height=10, width=10, units="in", dpi=500)
+```
+
+CHECK AT THE PATIENT LEVEL/
+
+```{r}
+cDC$category= paste0(cDC$orig.ident, "_", cDC$severity)
+
+cDC=AddModuleScore(cDC, features = hla, name="HLAII", ctrl = 100, nbin = 50)
+cDC=AddModuleScore(cDC, features = reg, name="HLAII_Regulators", ctrl = 100, nbin = 50)
+###
+p <-VlnPlot(cDC, features= c("HLAII1","HLAII_Regulators1"), split.by = "category", cols =cols, pt.size = 0, combine = F )
+
+
+p=DotPlot(cDC, features = c("RFXANK",  "RFX1", "RFX3","CIITA", "HLA-DQB1", "HLA-DQA2", "HLA-C", "HLA-DRB5"), dot.scale = 8, group.by = "category") + scale_color_viridis(option="D") +
+  theme (axis.text.x = element_text(size=14, face="bold", colour = "black",angle = 90),axis.text.y = element_text(size=14, face="bold", colour = "black",angle = 0)) 
+##
+ggsave(filename=paste0("PATHWAYS_Severity_DOTPLOT_HLA2_",Sys.Date(),".png"), plot=p, device="png",
+       path= path, height=12, width=8, units="in", dpi=500)
+```
+
+```{r}
+DefaultAssay(cDC)="RNA"
+p=FeaturePlot(cDC,c("RFXANK",  "RFX1", "RFX3","CIITA", "HLA-DQB1", "HLA-DQA2", "HLA-C", "HLA-DRB5"), split.by = "category" )
+```
+
+
